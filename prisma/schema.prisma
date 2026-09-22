@@ -1,0 +1,138 @@
+// Prisma schema — Telegram-Backed Image Storage Platform
+// PRODUCTION provider: PostgreSQL (managed Postgres on Fly.io).
+// The SQLite era is preserved in version history; the initial PostgreSQL
+// migration (prisma/migrations/000_init) recreates this exact shape.
+// Existing data moves via the documented import procedure — sequence
+// numbers are preserved, never regenerated.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  uploadLogs   UploadLog[]
+}
+
+model TelegramAccount {
+  id              Int      @id @default(autoincrement())
+  name            String   @default("Primary")
+  // Last 4 digits of phone, display only — never store full phone
+  phoneReference  String?
+  // AES-256-GCM ciphertext of the GramJS StringSession, base64-encoded
+  sessionCipher   String?
+  // 12-byte nonce, base64-encoded
+  sessionIV       String?
+  // 16-byte GCM auth tag, base64-encoded
+  sessionAuthTag  String?
+  // api_id from my.telegram.org (not secret itself, but recorded for audit)
+  apiId           Int?
+  // Status of the underlying MTProto session
+  status          String   @default("disconnected") // connected | disconnected | error | pending_2fa
+  lastConnectedAt DateTime?
+  lastError       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  storageChannels StorageChannel[]
+}
+
+model StorageChannel {
+  id                Int      @id @default(autoincrement())
+  telegramAccountId Int
+  telegramAccount   TelegramAccount @relation(fields: [telegramAccountId], references: [id], onDelete: Cascade)
+  name              String   // e.g. "🌿 GrowPlants Storage"
+  telegramChannelId String   @unique // e.g. "-1001234567890"
+  purpose           String?
+  status            String   @default("active") // active | inactive
+  lastTestedAt      DateTime?
+  lastTestOk        Boolean?
+  lastTestLatencyMs Int?
+  lastTestError     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  files             File[]
+
+  @@index([telegramAccountId])
+}
+
+model File {
+  id                     Int       @id @default(autoincrement())
+  publicId               String    @unique // legacy random id ("gp_x82ka91") — kept for /i/ compat
+  // Canonical sequential media number (e.g. 42 → /images/000042.jpg).
+  // Allocated from MediaSequence (atomic, never reused, never NULL for new rows).
+  // Nullable only so pre-existing rows can be backfilled.
+  sequenceNumber         Int?      @unique
+  storageChannelId        Int
+  storageChannel          StorageChannel @relation(fields: [storageChannelId], references: [id], onDelete: Cascade)
+  originalName            String
+  mimeType                String
+  extension               String
+  size                    Int       // bytes (SQLite Int max 2^63 — fine)
+  sha256                  String?   // computed lazily for ETag
+  // Telegram message id inside the channel
+  telegramMessageId       Int
+  // Telegram media.id (BigInt → store as string in SQLite)
+  telegramFileId          String
+  // Telegram media.access_hash (BigInt → store as string)
+  telegramAccessHash      String
+  // media.file_reference (Bytes → base64). Refreshed when expired.
+  telegramFileReference   String
+  // Full URL for display: https://storage.../i/gp_x82ka91
+  publicUrl              String
+  // Image dimensions in pixels (V2-Feature-5, nullable for pre-existing rows)
+  width                  Int?
+  height                 Int?
+  // V2-Feature-7: publicId of the auto-generated video thumbnail File row (if any)
+  thumbnailPublicId      String?
+  status                  String    @default("active") // active | deleted | missing
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+  uploadLogs              UploadLog[]
+
+  @@index([storageChannelId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model UploadLog {
+  id          Int      @id @default(autoincrement())
+  fileId      Int?
+  file        File?    @relation(fields: [fileId], references: [id], onDelete: SetNull)
+  adminId     Int?
+  admin       Admin?   @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  // "UPLOAD" | "DELETE" | "CHANNEL_ADD" | "CHANNEL_DELETE" | "CHANNEL_TEST" | "LOGIN" | "LOGOUT" | "TELEGRAM_CONNECT" | "TELEGRAM_DISCONNECT"
+  operation   String
+  // "SUCCESS" | "FAILED" | "PARTIAL"
+  status      String
+  errorMessage String?
+  metadata    String? // JSON stringified
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([fileId])
+  @@index([adminId])
+  @@index([operation])
+  @@index([createdAt])
+}
+
+/// Atomic allocator for canonical sequential media numbers (/images/000001.jpg…).
+/// One row is inserted per new File (inside the same transaction); the
+/// auto-increment id IS the sequence number. SQLite AUTOINCREMENT draws from
+/// sqlite_sequence — monotonic, never reused after deletes — and concurrent
+/// transactions serialize on the single writer, so collisions are impossible
+/// (no COUNT(*)/MAX() anywhere).
+model MediaSequence {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+}

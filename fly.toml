@@ -1,0 +1,68 @@
+# Fly.io configuration — single-machine production deployment.
+#
+# Design constraints (V1):
+# - EXACTLY ONE machine: GramJS holds one stateful MTProto session and the
+#   rate limiter / LRU cache are process-local. Do NOT add autoscaling.
+# - ≥1 GB RAM: uploads buffer whole files in memory (worst case ~200 MB
+#   transient for a 100 MB video + cache copy).
+# - No Caddy in prod: Fly terminates HTTPS and routes to :8080 directly.
+# - No Redis in V1: in-memory LRU fallback is sufficient on one machine.
+# - No secrets in this file — all secrets via `fly secrets set` (see .env.example).
+#
+# Adjust before first deploy:
+#   app            → your Fly app name (or run `fly launch` to generate this file)
+#   primary_region → closest to you / your Telegram DC (e.g. iad, fra, bom, sin)
+
+app = "growplants-media"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Non-secret runtime config only. Secrets are injected by Fly at runtime
+# and MUST NOT appear here.
+[env]
+  PORT = "8080"
+  HOSTNAME = "0.0.0.0"
+  NODE_ENV = "production"
+  MEDIA_PUBLIC_URL = "https://m.media-growplants.com"
+  APP_URL = "https://m.media-growplants.com"
+  NEXTAUTH_URL = "https://m.media-growplants.com"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+  # DB-gated health only: Telegram state must NOT fail deploys.
+  # Telegram stays separately observable via /api/status (telegram field).
+  [[http_service.checks]]
+    grace_period = "60s"
+    interval = "30s"
+    method = "GET"
+    path = "/api/health"
+    protocol = "http"
+    timeout = "10s"
+
+# Single shared-CPU machine with 1 GB RAM (see header note re: upload memory).
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"
+
+# Applies prisma/migrations to managed Postgres before each deploy's
+# machines start. Runs with Fly secrets available; fails the deploy if
+# the database is unreachable (safe: migrations are transactional).
+[deploy]
+  release_command = "npx prisma migrate deploy"
+
+# Graceful shutdown: standalone server.js handles SIGINT/SIGTERM.
+kill_signal = "SIGINT"
+kill_timeout = "15s"

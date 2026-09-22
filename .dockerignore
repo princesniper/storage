@@ -1,0 +1,36 @@
+# Keep the production image and build context lean.
+# Never ship secrets, local databases, or dev artifacts to Fly.
+
+node_modules
+.next
+out
+build
+
+.git
+.gitignore
+
+# Secrets / local env (Fly secrets provide these at runtime)
+.env
+.env.*
+!.env.example
+
+# Local SQLite (production uses managed Postgres)
+*.db
+*.db-journal
+/db/
+
+# Dev artifacts
+download
+DATA
+prompt
+worklog.md
+tool-results
+server.log
+*.log
+.zscripts
+.claude
+local-*
+
+# OS / editor noise
+.DS_Store
+*.pem

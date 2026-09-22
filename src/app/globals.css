@@ -1,0 +1,346 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* GrowPlants Media is dark-first infrastructure */
+html {
+  color-scheme: dark;
+}
+html:not(.light) {
+  background: #09090b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Phase A — status semantics (5 colors only, no decorative additions) */
+  --color-status-waiting: var(--status-waiting);
+  --color-status-processing: var(--status-processing);
+  --color-status-transit: var(--status-transit);
+  --color-status-completed: var(--status-completed);
+  --color-status-exception: var(--status-exception);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius-surface);
+}
+
+:root {
+  --radius: 0.625rem; /* 10px — controls: buttons, inputs, selects, badges */
+  --radius-control: 0.625rem; /* 10px — rounded-lg */
+  --radius-surface: 1rem; /* 16px — rounded-xl: cards, dialogs, sheets */
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --card: #111113;
+  --card-foreground: #f4f4f5;
+  --popover: #111113;
+  --popover-foreground: #f4f4f5;
+  --primary: #22c55e;
+  --primary-foreground: #052e16;
+  --secondary: #161618;
+  --secondary-foreground: #f4f4f5;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: #161618;
+  --accent-foreground: #22c55e;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #22c55e;
+  --chart-1: #22c55e;
+  --chart-2: #38bdf8;
+  --chart-3: #f59e0b;
+  --chart-4: #a855f7;
+  --chart-5: #ec4899;
+  --sidebar: #0d0d0f;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #22c55e;
+  --sidebar-primary-foreground: #052e16;
+  --sidebar-accent: #161618;
+  --sidebar-accent-foreground: #22c55e;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #22c55e;
+
+  /* ── Phase A: status semantics — 5 colors only ──
+     Waiting/Pending = amber · Processing/Confirmed = teal
+     Transit/Uploading/Moving = sky · Completed = green
+     Exception/Failed/Destructive = red */
+  --status-waiting: #f59e0b;
+  --status-processing: #2dd4bf;
+  --status-transit: #38bdf8;
+  --status-completed: #22c55e;
+  --status-exception: #ef4444;
+}
+
+.dark {
+  --background: #09090b;
+  --foreground: #f4f4f5;
+  --card: #111113;
+  --card-foreground: #f4f4f5;
+  --popover: #111113;
+  --popover-foreground: #f4f4f5;
+  --primary: #22c55e;
+  --primary-foreground: #052e16;
+  --secondary: #161618;
+  --secondary-foreground: #f4f4f5;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --accent: #161618;
+  --accent-foreground: #22c55e;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: #22c55e;
+  --chart-1: #22c55e;
+  --chart-2: #38bdf8;
+  --chart-3: #f59e0b;
+  --chart-4: #a855f7;
+  --chart-5: #ec4899;
+  --sidebar: #0d0d0f;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #22c55e;
+  --sidebar-primary-foreground: #052e16;
+  --sidebar-accent: #161618;
+  --sidebar-accent-foreground: #22c55e;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-ring: #22c55e;
+  --status-waiting: #f59e0b;
+  --status-processing: #2dd4bf;
+  --status-transit: #38bdf8;
+  --status-completed: #22c55e;
+  --status-exception: #ef4444;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-emerald-500/20 selection:text-emerald-300;
+  }
+}
+
+/* ============================================================
+   Phase A — "Dark Botanical Ops / Quiet Premium" tokens
+   Palette: unchanged dark-first green. No new palette.
+   Motion spec: micro .12s · fast .18s · standard .24s ·
+   deliberate .32s · modal .28s · page .26s · countUp .9s
+   Easing [0.16,1,0.3,1]. Springs documented in motion-tokens.ts.
+   Legacy aliases (--ease-out, --duration-fast/normal/surface)
+   are kept so existing components do not visually break.
+   ============================================================ */
+:root {
+  --ease-primary: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out: var(--ease-primary);
+  --ease-spring: cubic-bezier(0.34, 1.25, 0.64, 1);
+  --duration-micro: 0.12s;
+  --duration-fast: 0.18s;
+  --duration-standard: 0.24s;
+  --duration-normal: var(--duration-standard);
+  --duration-deliberate: 0.32s;
+  --duration-modal: 0.28s;
+  --duration-surface: var(--duration-modal);
+  --duration-page: 0.26s;
+  --duration-countup: 0.9s;
+  /* Spring params for Framer Motion (see src/lib/motion-tokens.ts) */
+  --spring-stiffness: 420;
+  --spring-damping: 34;
+  --spring-mass: 0.9;
+  --spring-soft-stiffness: 260;
+  --spring-soft-damping: 30;
+  --spring-soft-mass: 1;
+}
+
+/* ── Typography scale (Geist kept; classes are opt-in, pages untouched) ──
+   H1 24/28 semibold tight · H2 16/24 semibold · H3 14/20 semibold
+   Body 14/20 · Small 12/16 · Mono for IDs/slugs · tabular-nums for numbers */
+@layer utilities {
+  .type-h1 {
+    font-size: 24px;
+    line-height: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .type-h2 {
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .type-h3 {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+  }
+  .type-body {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 400;
+  }
+  .type-small {
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 400;
+  }
+  .type-mono {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+  }
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+  /* Radius helpers — rounded-xl surfaces, rounded-lg controls */
+  .surface-raised {
+    border-radius: var(--radius-surface);
+  }
+  .control-raised {
+    border-radius: var(--radius-control);
+  }
+}
+
+/* Page enter: subtle fade + 12px rise (spec: opacity 0→1, y 12→0, 0.26s) */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page-enter {
+  animation: page-enter var(--duration-page) var(--ease-primary) both;
+  animation-delay: var(--enter-delay, 0ms);
+}
+
+/* Success pop for check/feedback icons */
+@keyframes success-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-success-pop {
+  animation: success-pop var(--duration-modal) var(--ease-spring) both;
+}
+
+/* Shimmer-only loading (Phase E uses this; never stack with pulse) */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.04) 40%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.04) 60%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s var(--ease-primary) infinite;
+}
+
+/* Card hover elevation — GPU-accelerated (timings via Phase A aliases) */
+.card-interactive {
+  transition:
+    transform var(--duration-fast) var(--ease-primary),
+    box-shadow var(--duration-standard) var(--ease-primary),
+    border-color var(--duration-fast) var(--ease-primary),
+    background-color var(--duration-fast) var(--ease-primary);
+}
+
+.card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+}
+
+/* Ambient glow & backdrop utilities */
+.ambient-glow {
+  background: radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.04) 0%, transparent 70%);
+}
+
+.glass-panel {
+  background: rgba(17, 17, 19, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Subtle scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Respect users who disable animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

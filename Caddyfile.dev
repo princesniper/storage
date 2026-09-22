@@ -1,0 +1,32 @@
+# LOCAL DEVELOPMENT ONLY — serves the canonical media origin locally.
+#
+# Purpose: browsers request https://m.media-growplants.com/images/… (the fixed
+# canonical URL, identical in dev and prod), but in dev that hostname must
+# reach THIS machine. Combined with a hosts-file entry:
+#
+#     127.0.0.1 m.media-growplants.com
+#
+# this block terminates local TLS (Caddy's internal CA — run `caddy trust`
+# once as Administrator so browsers accept it) and proxies to Next.js.
+#
+# Chain:  m.media-growplants.com ──hosts──▶ 127.0.0.1:443 (Caddy here)
+#                                           ──proxy──▶ localhost:3000 (Next.js)
+#
+# Usage:  bun run dev  (terminal 1)
+#         bun run proxy:dev  (terminal 2, from repo root)
+#
+# PRODUCTION uses the repo-root Caddyfile (real ACME certs) plus a public DNS
+# A record for m.media-growplants.com. This file is NEVER used in production.
+{
+	# Don't auto-install the local CA on every `caddy run` (would UAC-prompt).
+	# Instead run `caddy trust` ONCE as Administrator beforehand.
+	skip_install_trust
+}
+
+m.media-growplants.com {
+	tls internal
+	reverse_proxy localhost:3000 {
+		header_up Host {host}
+		header_up X-Real-IP {remote_host}
+	}
+}
