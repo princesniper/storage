@@ -27,6 +27,16 @@ COPY . .
 RUN npx prisma generate
 # Standalone output + static/public are assembled by the build script
 # (next build && cp .next/static + public into .next/standalone).
+ARG DATABASE_URL
+ARG AUTH_SECRET
+ARG ADMIN_EMAIL
+ARG ADMIN_PASSWORD
+
+ENV DATABASE_URL=$DATABASE_URL \
+    AUTH_SECRET=$AUTH_SECRET \
+    ADMIN_EMAIL=$ADMIN_EMAIL \
+    ADMIN_PASSWORD=$ADMIN_PASSWORD
+
 RUN npm run build
 
 # ---------- runner: minimal production image ----------
