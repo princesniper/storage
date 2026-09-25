@@ -19,6 +19,7 @@ import { AuditStatusBadge, FileStatusBadge } from "@/components/ui/status-badge"
 import { DetailsSkeleton } from "@/components/ui/skeletons";
 import { formatBytes, formatDateTime, isVideoMime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { MoveFile } from "@/components/files/move-file";
 
 interface HistoryEntry {
   id: number;
@@ -48,6 +49,7 @@ interface DetailFile {
   deletedAt: string | null;
   telegramMessageId: number;
   channel: { id: number; name: string };
+  folder: { id: number; name: string } | null;
   history: HistoryEntry[];
 }
 
@@ -273,6 +275,7 @@ export default function FileDetailModal({
                 {detail.width && detail.height ? `${detail.width} × ${detail.height}` : "—"}
               </Field>
               <Field label="Storage channel">{detail.channel?.name}</Field>
+            <div className="sm:col-span-2"><MoveFile fileId={detail.id} currentFolderId={detail.folder?.id ?? null} /></div>
               <Field label="Status">
                 <FileStatusBadge status={detail.status} />
               </Field>
