@@ -26,7 +26,20 @@ const envSchema = z.object({
   MAX_FILE_SIZE_MB: z.string().optional(),
   MAX_VIDEO_SIZE_MB: z.string().optional().transform((v) => (v ? Number(v) : 100)),
   ALLOWED_MIME_TYPES: z.string().default(
-    "image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+    [
+      "image/jpeg","image/png","image/webp","image/gif","image/svg+xml",
+      "video/mp4","video/webm","video/quicktime",
+      "application/pdf","application/zip","application/x-zip-compressed",
+      "application/json","application/xml","application/javascript",
+      "application/octet-stream","application/vnd.ms-fontobject",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/msword","application/vnd.ms-excel","application/vnd.ms-powerpoint",
+      "font/ttf","font/otf","font/woff","font/woff2",
+      "text/plain","text/css","text/html","text/csv","text/xml","text/markdown",
+      "text/javascript","application/typescript"
+    ].join(",")
   ),
   // V2-Feature-6: optional Redis. Empty = in-memory LRU only.
   REDIS_URL: z.string().optional().default(""),

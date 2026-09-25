@@ -43,6 +43,32 @@ function resolveOrder(sort: "created" | "name" | "size", order?: "asc" | "desc")
   return sort === "name" ? "asc" : "desc";
 }
 
+const TEXT_EXTENSION_MIME: Record<string, string> = {
+  txt: "text/plain", md: "text/markdown", markdown: "text/markdown",
+  html: "text/html", htm: "text/html", css: "text/css", csv: "text/csv",
+  js: "text/javascript", jsx: "text/javascript", ts: "application/typescript",
+  tsx: "application/typescript", json: "application/json", xml: "text/xml",
+  svg: "image/svg+xml", yml: "text/plain", yaml: "text/plain",
+  env: "text/plain", gitignore: "text/plain",
+};
+
+function inferSafeTextMime(name: string, declared: string, buf: Buffer): string | null {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const inferred = TEXT_EXTENSION_MIME[ext];
+  if (!inferred || !allowedMimeTypes.includes(inferred)) return null;
+  if (buf.includes(0)) return null;
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    return null;
+  }
+  if (inferred === "image/svg+xml") {
+    const head = buf.subarray(0, Math.min(buf.length, 4096)).toString("utf8").trimStart().toLowerCase();
+    if (!head.includes("<svg") && !head.startsWith("<?xml")) return null;
+  }
+  return declared === inferred || !declared ? inferred : inferred;
+}
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -210,6 +236,14 @@ export async function POST(req: Request) {
   const file = form.get("file");
   const channelIdStr = form.get("storageChannelId");
   const folderIdRaw = form.get("folderId");
+  const relativePathRaw = form.get("relativePath");
+  if (relativePathRaw != null && typeof relativePathRaw !== "string") {
+    return NextResponse.json({ error: "INVALID_RELATIVE_PATH" }, { status: 400 });
+  }
+  const relativePath = typeof relativePathRaw === "string" ? relativePathRaw.replaceAll("\\", "/").trim() : null;
+  if (relativePath && (relativePath.startsWith("/") || /^[A-Za-z]:\//.test(relativePath) || relativePath.split("/").some((p) => p === ".." || p === "." || p.includes("\0")))) {
+    return NextResponse.json({ error: "INVALID_RELATIVE_PATH" }, { status: 400 });
+  }
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "NO_FILE" }, { status: 400 });
   }
@@ -255,14 +289,16 @@ export async function POST(req: Request) {
 
   // Magic byte MIME check (don't trust filename)
   const detected = await fileTypeFromBuffer(buf);
-  const detectedMime = detected?.mime;
+  const detectedMime = detected?.mime ?? inferSafeTextMime(file.name || "", file.type || "", buf);
   if (!detectedMime || !allowedMimeTypes.includes(detectedMime)) {
     return NextResponse.json(
       { error: "UNSUPPORTED_MIME", detected: detectedMime ?? "unknown" },
       { status: 415 }
     );
   }
-  // Cross-check: declared MIME (file.type) vs detected
+  // Cross-check: declared MIME (file.type) vs detected. For safe text formats
+  // file-type intentionally has no magic signature, so the extension/text
+  // validation above is the authoritative check.
   if (file.type && allowedMimeTypes.includes(file.type) && file.type !== detectedMime) {
     logger.warn("MIME mismatch — using detected", {
       declared: file.type,
@@ -319,7 +355,8 @@ export async function POST(req: Request) {
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    logger.error("Telegram upload failed", { err: msg, channel: channel.id, size: buf.length });
+    logger.error("Telegram upload failed", { err: msg, channel: channel.id, size: buf.length, relativePath });
+    console.error("[FolderUpload] Upload failed", { relativePath, error: msg });
     await audit({
       operation: "UPLOAD",
       status: "FAILED",
@@ -464,7 +501,8 @@ export async function POST(req: Request) {
     },
   });
 
-  logger.info("upload ok", { sequenceNumber, publicId, channel: channel.name, size: buf.length });
+  logger.info("upload ok", { sequenceNumber, publicId, channel: channel.name, size: buf.length, relativePath });
+  if (relativePath) console.info("[FolderUpload] File record created", { relativePath, fileId: fileRow.id, folderId });
 
   return NextResponse.json({
     success: true,
