@@ -338,9 +338,15 @@ export async function POST(req: Request) {
     }
   }
 
-  // Telegram must be connected
+  // Ensure the persisted production Telegram session is loaded before checking
+  // status. A fresh Railway process otherwise reports "disconnected" until
+  // another Telegram endpoint happens to initialize the singleton.
+  await telegramService.ensureStarted();
   if (telegramService.getStatus() !== "connected") {
-    return NextResponse.json({ error: "TELEGRAM_NOT_CONNECTED" }, { status: 503 });
+    return NextResponse.json({
+      error: "TELEGRAM_NOT_CONNECTED",
+      detail: telegramService.getLastError() ?? "Telegram client is not connected.",
+    }, { status: 503 });
   }
 
   // Upload to Telegram

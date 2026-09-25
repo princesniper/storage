@@ -293,24 +293,52 @@ class TelegramServiceImpl {
     accessHash: string;
     fileReference: string; // base64
   }> {
-    await this.start();
-    if (this.status !== "connected" || !this.client) {
-      throw new Error(this.notConnectedMessage());
-    }
+    await this.ensureConnectedClient();
+    if (!this.client) throw new Error(this.notConnectedMessage());
+
     const peer = await this.resolvePeer(peerId);
 
-    // Attach filename to buffer via custom file wrapper
+    // Attach filename to buffer via custom file wrapper.
     const fileWithMeta = buf as Buffer & { name?: string };
     fileWithMeta.name = originalName;
 
-    const sent = await this.client.sendFile(peer, {
-      file: fileWithMeta,
-      caption: originalName,
-      forceDocument: true, // Store every image as a document so file references are available.
-      fileSize: buf.length,
-    });
+    // Telegram may temporarily reject rapid uploads with FLOOD_WAIT.
+    // Back off using the exact server-provided delay instead of returning a
+    // misleading generic HTTP 502 to the browser.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const sent = await this.client.sendFile(peer, {
+          file: fileWithMeta,
+          caption: originalName,
+          forceDocument: true,
+          fileSize: buf.length,
+        });
+        return this.extractMessageRef(sent);
+      } catch (err) {
+        const waitSeconds = this.getFloodWaitSeconds(err);
+        if (waitSeconds != null && attempt < 2) {
+          logger.warn("Telegram upload rate limited; backing off", {
+            peerId,
+            originalName,
+            waitSeconds,
+            attempt: attempt + 1,
+          });
+          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+          continue;
+        }
 
-    return this.extractMessageRef(sent);
+        // A long-lived server can lose its MTProto socket between requests.
+        // Reconnect once and retry before surfacing the real Telegram error.
+        if (attempt === 0 && this.client && !this.client.connected) {
+          logger.warn("Telegram upload client disconnected; reconnecting", { originalName });
+          await this.ensureConnectedClient(true);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new Error("Telegram upload failed after retries");
   }
 
   /**
@@ -417,6 +445,31 @@ class TelegramServiceImpl {
         latencyMs: Date.now() - start,
         error: err instanceof Error ? err.message : String(err),
       };
+    }
+  }
+
+  private getFloodWaitSeconds(err: unknown): number | null {
+    const message = err instanceof Error ? err.message : String(err);
+    const match = message.match(/FLOOD_WAIT[_ ]?(\d+)/i);
+    if (!match) return null;
+    const seconds = Number(match[1]);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 60) : null;
+  }
+
+  private async ensureConnectedClient(forceReconnect = false): Promise<void> {
+    await this.ensureBooted();
+    if (!forceReconnect && this.client && this.status === "connected" && this.client.connected) {
+      return;
+    }
+    if (forceReconnect && this.client) {
+      try { await this.client.disconnect(); } catch {}
+      this.client = null;
+      this.status = "disconnected";
+      this.bootPromise = null;
+    }
+    await this.start();
+    if (!this.client || this.status !== "connected" || !this.client.connected) {
+      throw new Error(this.notConnectedMessage());
     }
   }
 

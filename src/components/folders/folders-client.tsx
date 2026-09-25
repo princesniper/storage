@@ -33,7 +33,9 @@ type Entry = FileSystemEntry & { isFile: boolean; isDirectory: boolean; name: st
 type FileEntry = FileSystemFileEntry & { file: (cb: (file: File) => void, err?: (e: DOMException) => void) => void };
 type DirEntry = FileSystemDirectoryEntry & { createReader: () => FileSystemDirectoryReader };
 
-const CONCURRENCY = 3;
+// Telegram MTProto uploads are intentionally serialized. Browser-side parallel
+// uploads can trigger Telegram flood limits and turn a healthy upload into 502s.
+const CONCURRENCY = 1;
 
 function normalizeRelativePath(path: string): string {
   return path.replaceAll("\\", "/").split("/").filter(Boolean).join("/");
@@ -283,7 +285,8 @@ export default function FoldersClient() {
           window.setTimeout(() => uploadOne(item, folderIds, attempt + 1).then(resolve), 1000 * (attempt + 1));
           return;
         }
-        patch(item.id, { status: "failed", error: json.error || `HTTP_${xhr.status}` });
+        const detail = typeof json.detail === "string" && json.detail.trim() ? ` — ${json.detail.trim()}` : "";
+        patch(item.id, { status: "failed", error: `${json.error || `HTTP_${xhr.status}`}${detail}` });
         resolve();
       };
       xhr.onerror = () => { patch(item.id, { status: "failed", error: "NETWORK_ERROR" }); resolve(); };
