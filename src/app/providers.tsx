@@ -4,6 +4,19 @@ import { ThemeProvider } from "next-themes";
 import { ReactNode, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+  const originalConsoleError = console.error;
+  console.error = (...args: unknown[]) => {
+    if (
+      typeof args[0] === "string" &&
+      args[0].includes("Encountered a script tag while rendering React component")
+    ) {
+      return;
+    }
+    originalConsoleError(...args);
+  };
+}
+
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
