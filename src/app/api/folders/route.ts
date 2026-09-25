@@ -25,7 +25,9 @@ export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const parentId = parseParentId(new URL(req.url).searchParams.get("parentId"));
+  const requestUrl = new URL(req.url);
+  const all = requestUrl.searchParams.get("all") === "true";
+  const parentId = parseParentId(requestUrl.searchParams.get("parentId"));
   if (parentId === "invalid") {
     return NextResponse.json({ error: "INVALID_PARENT_ID" }, { status: 400 });
   }
@@ -36,7 +38,7 @@ export async function GET(req: Request) {
   }
 
   const folders = await db.folder.findMany({
-    where: { parentId },
+    where: all ? undefined : { parentId },
     orderBy: { name: "asc" },
     include: {
       _count: { select: { children: true, files: true } },
