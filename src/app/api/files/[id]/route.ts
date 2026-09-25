@@ -74,7 +74,7 @@ export async function GET(req: Request, ctx: RouteContext) {
       deletedAt: file.deletedAt,
       telegramMessageId: file.telegramMessageId,
       channel: { id: file.storageChannel.id, name: file.storageChannel.name },
-      folder: file.folder,
+      folder: file.folderId ? { id: file.folderId } : null,
       history: logs.map((l) => ({
         id: l.id,
         operation: l.operation,
