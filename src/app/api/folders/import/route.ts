@@ -86,7 +86,7 @@ export async function POST(req: Request) {
             console.info("[FolderUpload] Created folder", { path: fullPath, id: folder.id });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            if (!message.includes("Folder_parentId_name_key")) throw error;
+            if (!message.includes("Folder_parentId_name_key") && !message.includes("Folder_root_name_key")) throw error;
             folder = await tx.folder.findFirst({
               where: { name, parentId },
               select: { id: true },
