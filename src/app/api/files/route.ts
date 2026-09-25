@@ -25,6 +25,7 @@ import { tryCreateVideoThumbnail } from "@/services/video-thumbnail";
 const listQuerySchema = z.object({
   search: z.string().max(200).optional().default(""),
   channelId: z.string().optional().default("all"),
+  folderId: z.string().optional().default("all"),
   status: z.enum(["active", "deleted", "missing", "all"]).optional().default("active"),
   page: z.coerce.number().int().min(1).optional().default(1),
   limit: z.coerce.number().int().min(1).max(100).optional().default(24),
@@ -72,6 +73,13 @@ export async function GET(req: Request) {
 
   const where: Record<string, unknown> = {};
   if (q.status !== "all") where.status = q.status;
+  if (q.folderId !== "all") {
+    const fid = Number(q.folderId);
+    if (!Number.isInteger(fid) || fid <= 0) {
+      return NextResponse.json({ error: "INVALID_FOLDER" }, { status: 400 });
+    }
+    where.folderId = fid;
+  }
   if (q.channelId && q.channelId !== "all") {
     const cid = Number(q.channelId);
     if (!Number.isInteger(cid) || cid <= 0) {
@@ -133,7 +141,10 @@ export async function GET(req: Request) {
       orderBy,
       skip: (page - 1) * limit,
       take: limit,
-      include: { storageChannel: { select: { id: true, name: true } } },
+      include: {
+        storageChannel: { select: { id: true, name: true } },
+        folder: { select: { id: true, name: true } },
+      },
     }),
     db.file.count({ where }),
   ]);
@@ -174,6 +185,7 @@ export async function GET(req: Request) {
       thumbnailUrl: f.thumbnailPublicId ? (thumbUrlByPublicId.get(f.thumbnailPublicId) ?? null) : null,
       createdAt: f.createdAt,
       storageChannel: f.storageChannel,
+      folder: f.folder,
     })),
     total,
     page,
