@@ -81,7 +81,7 @@ export default function FolderBrowser() {
   const folderId = Number(searchParams.get("folderId")) || null;
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
-  const [openFile, setOpenFile] = useState<FileRow | null>(null);
+  const [openFile, setOpenFile] = useState<FileRow | null>(null);\n  const [shareBusy, setShareBusy] = useState(false);\n  const [shareCopied, setShareCopied] = useState(false);\n  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const foldersQuery = useQuery<FolderRow[]>({
     queryKey: ["folder-browser", "folders"],
@@ -129,6 +129,41 @@ export default function FolderBrowser() {
     return result;
   }, [foldersQuery.data, folderId]);
 
+  const generateShareLink = async () => {
+    if (!current || shareBusy) return;
+    setShareBusy(true);
+    setShareCopied(false);
+    try {
+      const response = await fetch(`/api/folders/${current.id}/share`, { method: "POST" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.detail || json.error || "Failed to generate share link");
+      await navigator.clipboard.writeText(json.url);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 2500);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to generate share link");
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const deleteCurrentFolder = async () => {
+    if (!current || deleteBusy) return;
+    if (!window.confirm(`Delete folder "${current.name}" and all files inside it? This cannot be undone.`)) return;
+    setDeleteBusy(true);
+    try {
+      const response = await fetch(`/api/folders/${current.id}`, { method: "DELETE" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.detail || json.error || "Failed to delete folder");
+      await foldersQuery.refetch();
+      go(current.parentId);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to delete folder");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   const go = (id: number | null) => {
     router.push(id ? `/folders?folderId=${id}` : "/folders");
   };
@@ -146,9 +181,11 @@ export default function FolderBrowser() {
           <h1 className="mt-2 text-2xl font-semibold">{current?.name ?? "My Storage"}</h1>
           <p className="text-sm text-muted-foreground">{current ? `${current.totalFileCount ?? current.fileCount} files · ${formatBytes(current.totalSize ?? 0)}` : "Folders and media stored in your database."}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {current && <Button variant="outline" onClick={() => router.push(`/upload?folderId=${current.id}`)}><Folder className="mr-2 h-4 w-4" />Upload Files</Button>}
           <Button variant="outline" onClick={() => router.push("/folders?upload=1")}><FolderOpen className="mr-2 h-4 w-4" />Upload Folder</Button>
+          {current && <Button variant="outline" onClick={generateShareLink} disabled={shareBusy}><Link2 className="mr-2 h-4 w-4" />{shareBusy ? "Generating…" : shareCopied ? "Link Copied" : "Copy Share Link"}</Button>}
+          {current && <Button variant="destructive" onClick={deleteCurrentFolder} disabled={deleteBusy}><Trash2 className="mr-2 h-4 w-4" />{deleteBusy ? "Deleting…" : "Delete Folder"}</Button>}
         </div>
       </div>
 
