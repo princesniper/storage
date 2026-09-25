@@ -94,6 +94,9 @@ model File {
   height                 Int?
   // V2-Feature-7: publicId of the auto-generated video thumbnail File row (if any)
   thumbnailPublicId      String?
+  // Optional folder membership. Null means the file is in the root.
+  folderId               Int?
+  folder                  Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
   status                  String    @default("active") // active | deleted | missing
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -103,6 +106,21 @@ model File {
   @@index([storageChannelId])
   @@index([status])
   @@index([createdAt])
+  @@index([folderId])
+}
+
+model Folder {
+  id          Int       @id @default(autoincrement())
+  name        String
+  parentId    Int?
+  parent      Folder?   @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Folder[]  @relation("FolderTree")
+  files       File[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([parentId])
+  @@unique([parentId, name])
 }
 
 model UploadLog {
