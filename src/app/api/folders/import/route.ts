@@ -97,6 +97,9 @@ export async function POST(req: Request) {
 
         folderIds[fullPath] = folder.id;
       }
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
   } catch (error) {
     console.error("[FolderUpload] Folder tree resolution failed", error);
