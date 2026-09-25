@@ -88,35 +88,17 @@ export default function UploadClient() {
     const arr = Array.from(list);
     if (arr.length === 0) return;
     setBatchError(null);
-    setItems((prev) => {
-      const remaining = MAX_BULK_FILES - prev.length;
-      if (remaining <= 0) {
-        setBatchError(`Max ${MAX_BULK_FILES} files per batch.`);
-        return prev;
-      }
-      const toAdd = arr.slice(0, remaining);
-      if (arr.length > remaining) {
-        setBatchError(`Only first ${remaining} file(s) added — max ${MAX_BULK_FILES} per batch.`);
-      }
-      const currentTotal = prev.reduce((s, i) => s + i.file.size, 0);
-      const newTotal = toAdd.reduce((s, f) => s + f.size, 0);
-      if (currentTotal + newTotal > MAX_BATCH_BYTES) {
-        setBatchError("Total batch size exceeds 200MB cap. Remove files or split into smaller batches.");
-        return prev;
-      }
-      return [
-        ...prev,
-        ...toAdd.map((f) => ({
-          key: keyCounter++,
-          file: f,
-          preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
-          progress: 0,
-          status: "pending" as ItemStatus,
-        })),
-      ];
-    });
+    setItems((prev) => [
+      ...prev,
+      ...arr.map((f) => ({
+        key: keyCounter++,
+        file: f,
+        preview: f.type.startsWith("image/") ? URL.createObjectURL(f) : undefined,
+        progress: 0,
+        status: "pending" as ItemStatus,
+      })),
+    ]);
   }, []);
-
   // Revoke object URLs on unmount to avoid leaking memory
   const itemsRef = useRef<BatchItem[]>([]);
   itemsRef.current = items;
@@ -376,9 +358,9 @@ export default function UploadClient() {
               <Upload className="size-6" aria-hidden />
             </span>
             <span className="text-sm font-medium">
-              {dragOver ? "Drop files to add them" : `Drop images or videos here or click to choose (up to ${MAX_BULK_FILES})`}
+              {dragOver ? "Drop files to add them" : "Drop images or videos here or click to choose"}
             </span>
-            <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, MP4, WEBM, MOV · Images max 50 MB · Videos max 100 MB · 200 MB batch cap</span>
+            <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, MP4, WEBM, MOV · Images max 50 MB · Videos max 100 MB</span>
           </label>
         </div>
 
