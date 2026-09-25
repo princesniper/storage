@@ -74,6 +74,15 @@ class TelegramServiceImpl {
 
   private async boot(): Promise<void> {
     try {
+      // Never reuse the production Telegram MTProto auth key from a local/dev
+      // process. Telegram rejects concurrent use of the same auth key with
+      // AUTH_KEY_DUPLICATED. Development gets its own in-memory session.
+      if (process.env.NODE_ENV !== "production") {
+        logger.info("TelegramService: development mode — not loading persisted Telegram session");
+        this.status = "disconnected";
+        return;
+      }
+
       const acc = await db.telegramAccount.findFirst({
         orderBy: { updatedAt: "desc" },
       });
@@ -401,6 +410,14 @@ class TelegramServiceImpl {
   }
 
   private async persistSession(phone: string, sessionString: string): Promise<void> {
+    // A local/dev session must never overwrite the production session stored
+    // in the shared database. This also prevents AUTH_KEY_DUPLICATED when
+    // local development and Railway production run at the same time.
+    if (process.env.NODE_ENV !== "production") {
+      logger.info("TelegramService: development session kept in memory only");
+      return;
+    }
+
     const enc = encryptSession(sessionString);
     const phoneRef = phone.length >= 4
       ? `+${"*".repeat(Math.max(0, phone.length - 5))}${phone.slice(-4)}`
