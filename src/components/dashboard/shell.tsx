@@ -37,6 +37,7 @@ const NAV_GROUPS = [
     group: "LIBRARY",
     items: [
       { href: "/files", label: "Files", icon: ImageIcon },
+      { href: "/folders", label: "Folders", icon: FolderTree },
       { href: "/upload", label: "Upload", icon: Upload },
     ],
   },
