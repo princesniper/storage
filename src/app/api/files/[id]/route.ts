@@ -149,3 +149,36 @@ export async function DELETE(req: Request, ctx: RouteContext) {
 
   return NextResponse.json({ success: true, telegramDeleted: telegramDeleteOk });
 }
+
+
+export async function PATCH(req: Request, ctx: RouteContext) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+
+  const { id } = await ctx.params;
+  const file = await findFile(id);
+  if (!file) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (file.status === "deleted") return NextResponse.json({ error: "FILE_DELETED" }, { status: 409 });
+
+  const body = await req.json().catch(() => null);
+  const folderId = body?.folderId === null || body?.folderId === "root"
+    ? null
+    : Number(body?.folderId);
+
+  if (folderId !== null && (!Number.isInteger(folderId) || folderId <= 0)) {
+    return NextResponse.json({ error: "INVALID_FOLDER" }, { status: 400 });
+  }
+
+  if (folderId !== null) {
+    const folder = await db.folder.findUnique({ where: { id: folderId }, select: { id: true } });
+    if (!folder) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
+  }
+
+  const updated = await db.file.update({
+    where: { id: file.id },
+    data: { folderId },
+    select: { id: true, folderId: true },
+  });
+
+  return NextResponse.json({ success: true, file: updated });
+}
