@@ -20,7 +20,20 @@ export default function FoldersClient() {
       const q = parentId == null ? "" : `?parentId=${parentId}`;
       const r = await fetch(`/api/folders${q}`);
       if (!r.ok) throw new Error("Failed to load folders");
-      return r.json();
+      const payload = await r.json();
+      // The API returns an object: { folders: [...] }.
+      // Keep the query value array-shaped so the render layer can safely map it.
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload?.folders)) {
+        return payload.folders.map((folder: any) => ({
+          ...folder,
+          _count: {
+            children: folder.childFolderCount ?? 0,
+            files: folder.fileCount ?? 0,
+          },
+        }));
+      }
+      throw new Error("Invalid folders response");
     },
   });
 
