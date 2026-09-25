@@ -28,6 +28,7 @@ class TelegramServiceImpl {
   private lastError: string | null = null;
   private pending2FA: Pending2FA | null = null;
   private bootPromise: Promise<void> | null = null;
+  private readonly sessionFile = process.env.TELEGRAM_DEV_SESSION_FILE || ".data/telegram-dev.session";
 
   getStatus(): TelegramStatus {
     return this.status;
@@ -74,12 +75,37 @@ class TelegramServiceImpl {
 
   private async boot(): Promise<void> {
     try {
-      // Never reuse the production Telegram MTProto auth key from a local/dev
-      // process. Telegram rejects concurrent use of the same auth key with
-      // AUTH_KEY_DUPLICATED. Development gets its own in-memory session.
+      // Development uses a separate, file-backed session so local restarts stay
+      // authenticated without ever reading or overwriting the production DB session.
       if (process.env.NODE_ENV !== "production") {
-        logger.info("TelegramService: development mode — not loading persisted Telegram session");
-        this.status = "disconnected";
+        const { existsSync, mkdirSync, readFileSync } = await import("fs");
+        const { dirname } = await import("path");
+        let sessionString = "";
+        if (existsSync(this.sessionFile)) {
+          sessionString = readFileSync(this.sessionFile, "utf8").trim();
+          logger.info("TelegramService: loading isolated development session");
+        } else {
+          logger.info("TelegramService: no isolated development session, waiting for connect");
+        }
+        this.client = new TelegramClient(
+          new StringSession(sessionString),
+          env.TELEGRAM_API_ID,
+          env.TELEGRAM_API_HASH,
+          { connectionRetries: 5, useWSS: true }
+        );
+        await this.client.connect();
+        if (!sessionString) {
+          this.status = "disconnected";
+          return;
+        }
+        const authorized = await this.client.checkAuthorization();
+        if (!authorized) {
+          this.status = "disconnected";
+          this.client = null;
+          logger.warn("TelegramService: isolated development session is not authorized");
+          return;
+        }
+        this.status = "connected";
         return;
       }
 
@@ -410,11 +436,14 @@ class TelegramServiceImpl {
   }
 
   private async persistSession(phone: string, sessionString: string): Promise<void> {
-    // A local/dev session must never overwrite the production session stored
-    // in the shared database. This also prevents AUTH_KEY_DUPLICATED when
-    // local development and Railway production run at the same time.
+    // Local development uses its own file-backed GramJS session. It is never
+    // written to the shared production database, preventing AUTH_KEY_DUPLICATED.
     if (process.env.NODE_ENV !== "production") {
-      logger.info("TelegramService: development session kept in memory only");
+      const { mkdirSync, writeFileSync } = await import("fs");
+      const { dirname } = await import("path");
+      mkdirSync(dirname(this.sessionFile), { recursive: true });
+      writeFileSync(this.sessionFile, sessionString, { encoding: "utf8", mode: 0o600 });
+      logger.info("TelegramService: isolated development session persisted");
       return;
     }
 
