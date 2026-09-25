@@ -108,9 +108,70 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
   const id = parseId((await ctx.params).id);
   if (!id) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
 
-  const existing = await db.folder.findUnique({ where: { id }, select: { id: true } });
+  const existing = await db.folder.findUnique({ where: { id }, select: { id: true, name: true } });
   if (!existing) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
+  // Delete the complete folder subtree. Files are marked deleted first so
+  // public media URLs stop working immediately; Telegram deletion is best-effort.
+  const allFolders = await db.folder.findMany({ select: { id: true, parentId: true } });
+  const folderIds = new Set<number>([id]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const folder of allFolders) {
+      if (folder.parentId !== null && folderIds.has(folder.parentId) && !folderIds.has(folder.id)) {
+        folderIds.add(folder.id);
+        changed = true;
+      }
+    }
+  }
+
+  const files = await db.file.findMany({
+    where: { folderId: { in: [...folderIds] }, status: { not: "deleted" } },
+    select: {
+      id: true,
+      publicId: true,
+      sequenceNumber: true,
+      telegramMessageId: true,
+      storageChannel: { select: { telegramChannelId: true } },
+    },
+  });
+
+  await db.file.updateMany({
+    where: { id: { in: files.map((file) => file.id) } },
+    data: { status: "deleted", deletedAt: new Date() },
+  });
+
+  let telegramDeleted = 0;
+  const telegramErrors: string[] = [];
+  try {
+    const { telegramService } = await import("@/services/telegram");
+    const { cache } = await import("@/lib/cache");
+    const { formatSequence } = await import("@/lib/media-url");
+
+    if (telegramService.getStatus() !== "connected") await telegramService.ensureStarted();
+    for (const file of files) {
+      await cache.invalidate(file.sequenceNumber != null ? formatSequence(file.sequenceNumber) : file.publicId);
+      if (telegramService.getStatus() !== "connected") continue;
+      try {
+        await telegramService.deleteMessage(file.storageChannel.telegramChannelId, file.telegramMessageId);
+        telegramDeleted++;
+      } catch (error) {
+        telegramErrors.push(error instanceof Error ? error.message : String(error));
+      }
+    }
+  } catch (error) {
+    telegramErrors.push(error instanceof Error ? error.message : String(error));
+  }
+
   await db.folder.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+
+  return NextResponse.json({
+    success: true,
+    folderId: id,
+    deletedFolders: folderIds.size,
+    deletedFiles: files.length,
+    telegramDeleted,
+    telegramErrors: telegramErrors.length ? telegramErrors : undefined,
+  });
 }
