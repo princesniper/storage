@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft, ChevronRight, FileArchive, FileCode2, FileText, Folder,
   FolderOpen, Grid2X2, Image as ImageIcon, List, Play, Search, Video,
-  FileSpreadsheet, File
+  FileSpreadsheet, File, Link2, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
