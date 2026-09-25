@@ -81,7 +81,10 @@ export default function FolderBrowser() {
   const folderId = Number(searchParams.get("folderId")) || null;
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
-  const [openFile, setOpenFile] = useState<FileRow | null>(null);\n  const [shareBusy, setShareBusy] = useState(false);\n  const [shareCopied, setShareCopied] = useState(false);\n  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [openFile, setOpenFile] = useState<FileRow | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const foldersQuery = useQuery<FolderRow[]>({
     queryKey: ["folder-browser", "folders"],
