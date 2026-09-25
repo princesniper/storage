@@ -19,10 +19,8 @@ import { cn } from "@/lib/utils";
 interface ChannelRow { id: number; name: string; }
 interface ChannelList { channels: ChannelRow[]; }
 
-// Configurable via env MAX_BULK_UPLOAD_FILES=10 (server default); keep in sync.
-const MAX_BULK_FILES = 10;
-// Hard cap: total batch size 200MB
-const MAX_BATCH_BYTES = 200 * 1024 * 1024;
+// No app-level folder/batch storage cap. Upload concurrency is intentionally bounded
+// to keep the browser and Telegram connection stable while allowing any number of files.
 const CONCURRENCY = 3;
 const MAX_RETRIES_ON_429 = 3;
 const RETRY_WAIT_S = 5;
@@ -290,7 +288,7 @@ export default function UploadClient() {
     <div className="space-y-6">
       <PageHeader
         title="Upload Media"
-        description={`Add assets to your media infrastructure · up to ${MAX_BULK_FILES} files per batch.`}
+        description="Add assets to your media infrastructure · no app-level batch or folder storage cap."
         actions={
           <Button size="sm" variant="outline" onClick={() => router.push("/files")}>
             View library
