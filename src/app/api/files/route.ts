@@ -197,6 +197,7 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const file = form.get("file");
   const channelIdStr = form.get("storageChannelId");
+  const folderIdRaw = form.get("folderId");
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: "NO_FILE" }, { status: 400 });
   }
@@ -206,6 +207,15 @@ export async function POST(req: Request) {
   const channelId = Number(channelIdStr);
   if (!Number.isInteger(channelId) || channelId <= 0) {
     return NextResponse.json({ error: "INVALID_CHANNEL" }, { status: 400 });
+  }
+
+  const folderId = folderIdRaw == null || folderIdRaw === "" ? null : Number(folderIdRaw);
+  if (folderId !== null && (!Number.isInteger(folderId) || folderId <= 0)) {
+    return NextResponse.json({ error: "INVALID_FOLDER" }, { status: 400 });
+  }
+  if (folderId !== null) {
+    const folder = await db.folder.findUnique({ where: { id: folderId }, select: { id: true } });
+    if (!folder) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
   }
 
   // Validate channel exists and is active
@@ -338,6 +348,7 @@ export async function POST(req: Request) {
           publicId,
           sequenceNumber: seq.id,
           storageChannelId: channel.id,
+          folderId,
           originalName,
           mimeType: detectedMime,
           extension: ext,
@@ -351,7 +362,10 @@ export async function POST(req: Request) {
           publicUrl,
           status: "active",
         },
-        include: { storageChannel: { select: { id: true, name: true } } },
+        include: {
+          storageChannel: { select: { id: true, name: true } },
+          folder: { select: { id: true, name: true } },
+        },
       });
     });
   } catch (e) {
@@ -457,6 +471,7 @@ export async function POST(req: Request) {
       // `url` is kept for backwards compatibility with the upload client.
       publicUrl: fileRow.publicUrl,
       channel: { id: channel.id, name: channel.name },
+      folder: fileRow.folder,
       createdAt: fileRow.createdAt,
     },
   }, { status: 201 });
