@@ -42,19 +42,83 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
     include: {
       _count: { select: { children: true, files: true } },
+      files: { select: { size: true, createdAt: true, updatedAt: true } },
     },
   });
 
+  // Calculate recursive folder totals from the same database snapshot. This
+  // keeps the UI lightweight while still showing true subtree counts/sizes.
+  const allRows = all
+    ? folders
+    : await db.folder.findMany({
+        select: {
+          id: true,
+          parentId: true,
+          files: { select: { size: true, createdAt: true, updatedAt: true } },
+          _count: { select: { children: true, files: true } },
+          name: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+  const byId = new Map(allRows.map((f) => [f.id, f]));
+  const childrenByParent = new Map<number, typeof allRows>();
+  for (const row of allRows) {
+    if (row.parentId === null) continue;
+    const list = childrenByParent.get(row.parentId) ?? [];
+    list.push(row);
+    childrenByParent.set(row.parentId, list);
+  }
+  const totals = new Map<number, { files: number; folders: number; size: number; modified: Date }>();
+  const visiting = new Set<number>();
+
+  const calculate = (id: number): { files: number; folders: number; size: number; modified: Date } => {
+    const cached = totals.get(id);
+    if (cached) return cached;
+    if (visiting.has(id)) return { files: 0, folders: 0, size: 0, modified: new Date(0) };
+    visiting.add(id);
+    const row = byId.get(id);
+    if (!row) return { files: 0, folders: 0, size: 0, modified: new Date(0) };
+    let result = {
+      files: row.files.length,
+      folders: row._count.children,
+      size: row.files.reduce((sum, f) => sum + Number(f.size), 0),
+      modified: row.files.reduce((latest, f) => {
+        const d = f.updatedAt ?? f.createdAt;
+        return d > latest ? d : latest;
+      }, row.updatedAt),
+    };
+    for (const child of childrenByParent.get(id) ?? []) {
+      const sub = calculate(child.id);
+      result = {
+        files: result.files + sub.files,
+        folders: result.folders + 1 + sub.folders,
+        size: result.size + sub.size,
+        modified: sub.modified > result.modified ? sub.modified : result.modified,
+      };
+    }
+    visiting.delete(id);
+    totals.set(id, result);
+    return result;
+  };
+
   return NextResponse.json({
-    folders: folders.map((folder) => ({
-      id: folder.id,
-      name: folder.name,
-      parentId: folder.parentId,
-      createdAt: folder.createdAt,
-      updatedAt: folder.updatedAt,
-      childFolderCount: folder._count.children,
-      fileCount: folder._count.files,
-    })),
+    folders: folders.map((folder) => {
+      const total = calculate(folder.id);
+      return {
+        id: folder.id,
+        name: folder.name,
+        parentId: folder.parentId,
+        createdAt: folder.createdAt,
+        updatedAt: folder.updatedAt,
+        childFolderCount: folder._count.children,
+        fileCount: folder._count.files,
+        totalFileCount: total.files,
+        totalFolderCount: total.folders,
+        totalSize: total.size,
+        lastModified: total.modified,
+      };
+    }),
   });
 }
 

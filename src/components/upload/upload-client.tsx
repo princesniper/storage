@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -63,6 +63,8 @@ function friendlyUploadError(raw: string, httpStatus?: number): string {
 
 export default function UploadClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetFolderId = Number(searchParams.get("folderId")) || null;
   const { toast } = useToast();
   const [channelId, setChannelId] = useState<string>("");
   const [items, setItems] = useState<BatchItem[]>([]);
@@ -149,6 +151,7 @@ export default function UploadClient() {
       const fd = new FormData();
       fd.append("file", item.file);
       fd.append("storageChannelId", channel);
+      if (targetFolderId) fd.append("folderId", String(targetFolderId));
 
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable && !abortRef.current) {

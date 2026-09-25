@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import FolderBrowser from "@/components/folders/folder-browser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileUp, Folder, FolderUp, Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -163,37 +165,9 @@ export default function FoldersClient() {
     },
   });
 
-  const { data: roots = [], isLoading } = useQuery<FolderItem[]>({
-    queryKey: ["folders", "root"],
-    queryFn: async () => {
-      const r = await fetch("/api/folders");
-      if (!r.ok) throw new Error("Failed to load folders");
-      const payload = await r.json();
-      return (payload.folders ?? []).map((f: FolderItem) => f);
-    },
-  });
-
-  const { data: allFolders = [] } = useQuery<FolderItem[]>({
-    queryKey: ["folders", "all"],
-    queryFn: async () => {
-      const r = await fetch("/api/folders?all=true");
-      if (!r.ok) throw new Error("Failed to load folder tree");
-      const payload = await r.json();
-      return payload.folders ?? [];
-    },
-  });
-
-  const childrenByParent = useMemo(() => {
-    const map = new Map<number | null, FolderItem[]>();
-    for (const folder of allFolders) {
-      const list = map.get(folder.parentId) ?? [];
-      list.push(folder);
-      map.set(folder.parentId, list);
-    }
-    for (const list of map.values()) list.sort((a, b) => a.name.localeCompare(b.name));
-    return map;
-  }, [allFolders]);
-
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const uploadMode = searchParams.get("upload") === "1";
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
 
@@ -352,81 +326,57 @@ export default function FoldersClient() {
     }
   }
 
-  if (isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading folders…</div>;
-
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Folders</h1>
-          <p className="text-sm text-muted-foreground">Drop a desktop folder and keep its exact structure.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={() => inputRef.current?.click()} disabled={uploading}>
-            <FolderUp className="mr-2 h-4 w-4" /> Upload Folder
-          </Button>
-          {items.length > 0 && !uploading && <Button variant="outline" onClick={clearUpload}>Clear</Button>}
-        </div>
-      </div>
-
-      <input ref={inputRef} type="file" className="hidden" onChange={onSelectFolder} disabled={uploading} {...({ webkitdirectory: "", directory: "" } as any)} />
-
-      <div className="flex max-w-xl flex-col gap-2">
-        <label className="text-sm font-medium">Storage Destination</label>
-        <select value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={uploading} className="h-10 rounded-md border bg-background px-3 text-sm">
-          <option value="">Select Telegram channel…</option>
-          {channels.map((channel) => <option key={channel.id} value={String(channel.id)}>{channel.name}</option>)}
-        </select>
-      </div>
-
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={onDrop}
-        className={cn("rounded-2xl border-2 border-dashed p-10 text-center transition-colors", dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30")}
-      >
-        <UploadCloud className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-        <div className="font-medium">{dragOver ? "Drop folder here" : "Drag & drop a complete desktop folder here"}</div>
-        <div className="mt-1 text-sm text-muted-foreground">No manual folder creation. Nested folders are created automatically.</div>
-      </div>
-
-      {items.length > 0 && (
-        <div className="space-y-4 rounded-2xl border p-5">
-          <div className="flex items-center justify-between gap-4">
+    <div className="space-y-6">
+      <FolderBrowser />
+      {uploadMode && (
+        <section className="mx-6 mb-6 space-y-5 rounded-2xl border bg-card p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="font-medium">Uploading folder: {rootName}</div>
-              <div className="text-sm text-muted-foreground">{stats.uploaded} / {stats.total} files · {stats.failed} failed</div>
+              <h2 className="text-lg font-semibold">Upload Folder</h2>
+              <p className="text-sm text-muted-foreground">Select or drop one complete folder. Its hierarchy will be preserved.</p>
             </div>
-            <div className="text-2xl font-semibold tabular-nums">{stats.percent}%</div>
+            <Button variant="ghost" onClick={() => router.push("/folders")} disabled={uploading}>Close</Button>
           </div>
-          <Progress value={stats.percent} />
-          {current && <div className="text-xs text-muted-foreground truncate">Current: {current}</div>}
 
-          {failedItems.length > 0 && !uploading && (
-            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-              <div className="font-medium">Failed files</div>
-              <div className="mt-2 space-y-1 text-sm">{failedItems.map((item) => <div key={item.id} className="flex items-center gap-2"><FileUp className="h-4 w-4" />{item.relativePath}<span className="text-xs text-muted-foreground">({item.error})</span></div>)}</div>
-              <Button className="mt-3" size="sm" onClick={() => runQueue(true)}><RotateCcw className="mr-2 h-4 w-4" />Retry Failed</Button>
+          <input ref={inputRef} type="file" className="hidden" onChange={onSelectFolder} disabled={uploading} {...({ webkitdirectory: "", directory: "" } as any)} />
+
+          <div className="flex max-w-xl flex-col gap-2">
+            <label className="text-sm font-medium">Storage Destination</label>
+            <select value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={uploading} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <option value="">Select Telegram channel…</option>
+              {channels.map((channel) => <option key={channel.id} value={String(channel.id)}>{channel.name}</option>)}
+            </select>
+          </div>
+
+          <div onClick={() => inputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} className={cn("rounded-2xl border-2 border-dashed p-10 text-center transition-colors cursor-pointer", dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30")}>
+            <UploadCloud className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+            <div className="font-medium">{dragOver ? "Drop folder here" : "Drag & drop a complete desktop folder here"}</div>
+            <div className="mt-1 text-sm text-muted-foreground">Nested folders are created automatically.</div>
+          </div>
+
+          {items.length > 0 && (
+            <div className="space-y-4 rounded-2xl border p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div><div className="font-medium">Uploading folder: {rootName}</div><div className="text-sm text-muted-foreground">{stats.uploaded} / {stats.total} files · {stats.failed} failed</div></div>
+                <div className="text-2xl font-semibold tabular-nums">{stats.percent}%</div>
+              </div>
+              <Progress value={stats.percent} />
+              {current && <div className="text-xs text-muted-foreground truncate">Current: {current}</div>}
+              {failedItems.length > 0 && !uploading && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                  <div className="font-medium">Failed files</div>
+                  <div className="mt-2 space-y-1 text-sm">{failedItems.map((item) => <div key={item.id}>{item.relativePath} <span className="text-xs text-muted-foreground">({item.error})</span></div>)}</div>
+                  <Button className="mt-3" size="sm" onClick={() => runQueue(true)}><RotateCcw className="mr-2 h-4 w-4" />Retry Failed</Button>
+                </div>
+              )}
+              {!uploading && stats.uploaded < stats.total && failedItems.length === 0 && <Button onClick={() => runQueue(false)}><UploadCloud className="mr-2 h-4 w-4" />Start Upload</Button>}
+              {uploading && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Uploading with {CONCURRENCY} concurrent workers…</div>}
+              {!uploading && <Button variant="outline" onClick={clearUpload}>Clear</Button>}
             </div>
           )}
-
-          {!uploading && stats.uploaded < stats.total && failedItems.length === 0 && (
-            <Button onClick={() => runQueue(false)}><UploadCloud className="mr-2 h-4 w-4" />Start Upload</Button>
-          )}
-          {uploading && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Uploading with {CONCURRENCY} concurrent workers…</div>}
-        </div>
+        </section>
       )}
-
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold">Stored folder tree</h2>
-        {roots.length === 0 ? (
-          <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">No folders yet.</div>
-        ) : (
-          <div className="rounded-xl border p-2">
-            <FolderTree folders={roots} childrenByParent={childrenByParent} />
-          </div>
-        )}
-      </div>
     </div>
   );
 }
