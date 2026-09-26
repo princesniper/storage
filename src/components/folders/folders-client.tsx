@@ -8,6 +8,7 @@ import { FileUp, Folder, FolderUp, Loader2, RotateCcw, UploadCloud } from "lucid
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
+import { formatBytes } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 
 type FolderItem = {
@@ -25,6 +26,8 @@ type UploadItem = {
   folderPath: string;
   status: "pending" | "uploading" | "success" | "failed";
   progress: number;
+  loadedBytes: number;
+  speedBps: number;
   error?: string;
   url?: string;
 };
@@ -108,10 +111,18 @@ function progressFor(items: UploadItem[]) {
   const total = items.length;
   const uploaded = items.filter((i) => i.status === "success").length;
   const failed = items.filter((i) => i.status === "failed").length;
+  const totalBytes = items.reduce((sum, i) => sum + i.file.size, 0);
+  const uploadedBytes = items.reduce(
+    (sum, i) => sum + (i.status === "success" ? i.file.size : i.status === "uploading" ? i.loadedBytes : 0),
+    0
+  );
   const active = items.filter((i) => i.status === "uploading");
   const activeProgress = active.reduce((sum, i) => sum + i.progress / 100, 0);
   const percent = total ? Math.floor(((uploaded + failed + activeProgress) / total) * 100) : 0;
-  return { total, uploaded, failed, percent };
+  const speedBps = active.reduce((max, i) => Math.max(max, i.speedBps), 0);
+  const remainingBytes = Math.max(0, totalBytes - uploadedBytes);
+  const etaSeconds = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : null;
+  return { total, uploaded, failed, percent, totalBytes, uploadedBytes, speedBps, etaSeconds };
 }
 
 function FolderTree({
@@ -172,6 +183,7 @@ export default function FoldersClient() {
   const uploadMode = searchParams.get("upload") === "1";
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
+  const currentItem = useMemo(() => items.find((i) => i.status === "uploading") ?? null, [items]);
 
   const patch = (id: string, value: Partial<UploadItem>) =>
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...value } : item));
@@ -198,6 +210,8 @@ export default function FoldersClient() {
           folderPath,
           status: "pending" as const,
           progress: 0,
+          loadedBytes: 0,
+          speedBps: 0,
         };
       })
       .filter((item) => item.relativePath.split("/").length >= 2);
@@ -262,8 +276,9 @@ export default function FoldersClient() {
         return;
       }
       setCurrent(item.relativePath);
-      patch(item.id, { status: "uploading", progress: 0, error: undefined });
+      patch(item.id, { status: "uploading", progress: 0, loadedBytes: 0, speedBps: 0, error: undefined });
       const xhr = new XMLHttpRequest();
+      const startedAt = performance.now();
       const fd = new FormData();
       fd.append("file", item.file, item.file.name);
       fd.append("storageChannelId", channelId);
@@ -271,13 +286,21 @@ export default function FoldersClient() {
       fd.append("relativePath", item.relativePath);
 
       xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable) patch(item.id, { progress: Math.round((event.loaded / event.total) * 100) });
+        if (event.lengthComputable) {
+          const elapsedSeconds = Math.max((performance.now() - startedAt) / 1000, 0.001);
+          const speedBps = event.loaded / elapsedSeconds;
+          patch(item.id, {
+            progress: Math.round((event.loaded / event.total) * 100),
+            loadedBytes: event.loaded,
+            speedBps,
+          });
+        }
       };
       xhr.onload = () => {
         let json: any = {};
         try { json = JSON.parse(xhr.responseText || "{}"); } catch {}
         if (xhr.status >= 200 && xhr.status < 300 && json.success) {
-          patch(item.id, { status: "success", progress: 100, url: json.file?.url });
+          patch(item.id, { status: "success", progress: 100, loadedBytes: item.file.size, speedBps: item.file.size / Math.max((performance.now() - startedAt) / 1000, 0.001), url: json.file?.url });
           resolve();
           return;
         }
@@ -361,11 +384,33 @@ export default function FoldersClient() {
           {items.length > 0 && (
             <div className="space-y-4 rounded-2xl border p-5">
               <div className="flex items-center justify-between gap-4">
-                <div><div className="font-medium">Uploading folder: {rootName}</div><div className="text-sm text-muted-foreground">{stats.uploaded} / {stats.total} files · {stats.failed} failed</div></div>
+                <div>
+                  <div className="font-medium">Uploading folder: {rootName}</div>
+                  <div className="text-sm text-muted-foreground">
+                    {stats.uploaded} / {stats.total} files · {stats.failed} failed · {formatBytes(stats.uploadedBytes)} / {formatBytes(stats.totalBytes)}
+                  </div>
+                </div>
                 <div className="text-2xl font-semibold tabular-nums">{stats.percent}%</div>
               </div>
               <Progress value={stats.percent} />
-              {current && <div className="text-xs text-muted-foreground truncate">Current: {current}</div>}
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>Speed: {stats.speedBps > 0 ? formatBytes(stats.speedBps) + "/s" : "—"}</span>
+                <span>ETA: {stats.etaSeconds !== null ? Math.floor(stats.etaSeconds / 60) + "m " + (stats.etaSeconds % 60) + "s" : "—"}</span>
+              </div>
+              {currentItem && (
+                <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-sm font-medium">{currentItem.relativePath}</span>
+                    <span className="shrink-0 text-sm font-semibold tabular-nums">{currentItem.progress}%</span>
+                  </div>
+                  <Progress value={currentItem.progress} />
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>{formatBytes(currentItem.loadedBytes)} / {formatBytes(currentItem.file.size)}</span>
+                    <span>{currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "—"}</span>
+                  </div>
+                </div>
+              )}
+              {current && !currentItem && <div className="text-xs text-muted-foreground truncate">Current: {current}</div>}
               {failedItems.length > 0 && !uploading && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
                   <div className="font-medium">Failed files</div>

@@ -24,7 +24,7 @@ const envSchema = z.object({
   // V2: canonical file size limit (images). Defaults to 50; legacy MAX_IMAGE_SIZE_MB
   // acts as an alias when MAX_FILE_SIZE_MB is unset.
   MAX_FILE_SIZE_MB: z.string().optional(),
-  MAX_VIDEO_SIZE_MB: z.string().optional().transform((v) => (v ? Number(v) : 100)),
+  MAX_VIDEO_SIZE_MB: z.string().optional().transform((v) => (v ? Number(v) : 1024)),
   ALLOWED_MIME_TYPES: z.string().default(
     [
       "image/jpeg","image/png","image/webp","image/gif","image/svg+xml",
