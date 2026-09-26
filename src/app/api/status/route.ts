@@ -16,9 +16,13 @@
  */
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { telegramService } from "@/services/telegram";
+import { telegramService, getTelegramUploadProgress } from "@/services/telegram";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const uploadId = new URL(req.url).searchParams.get("uploadId");
+  if (uploadId) {
+    return NextResponse.json({ upload: getTelegramUploadProgress(uploadId) });
+  }
   let database = false;
   try {
     await db.admin.count();
