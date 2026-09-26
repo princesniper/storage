@@ -19,18 +19,13 @@ export async function POST(req: Request, ctx: RouteContext) {
 
   const token = createFolderShareToken(folder.id);
 
-  // Share links are public application URLs. Never derive them from the
-  // incoming request host because Railway/container hosts can be 0.0.0.0:8080.
-  const configuredOrigin = (process.env.APP_URL ?? "").trim().replace(/\/+$/, "");
-  let publicOrigin = CANONICAL_MEDIA_ORIGIN;
-  if (configuredOrigin) {
-    try {
-      const parsed = new URL(configuredOrigin);
-      if (parsed.protocol === "https:" || parsed.protocol === "http:") publicOrigin = configuredOrigin;
-    } catch {
-      // Fall back to the known canonical public origin.
-    }
-  }
+  // Folder share links use the app's Railway public domain, not the custom
+  // media domain and never the container/request host (0.0.0.0:8080).
+  const railwayDomain = (process.env.RAILWAY_PUBLIC_DOMAIN ?? "growplants-media.up.railway.app")
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+  const publicOrigin = `https://${railwayDomain}`;
 
   return NextResponse.json({
     success: true,
