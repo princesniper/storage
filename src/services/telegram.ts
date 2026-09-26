@@ -22,6 +22,29 @@ import { randomBytes } from "crypto";
 
 export type TelegramStatus = "disconnected" | "connecting" | "connected" | "pending_2fa" | "error";
 
+type UploadProgressState = { progress: number; stage: "telegram" | "complete" | "failed"; updatedAt: number };
+const globalForUploadProgress = globalThis as unknown as { __uploadProgress?: Map<string, UploadProgressState> };
+const uploadProgress = globalForUploadProgress.__uploadProgress ?? new Map<string, UploadProgressState>();
+globalForUploadProgress.__uploadProgress = uploadProgress;
+
+export function setTelegramUploadProgress(id: string, progress: number, stage: UploadProgressState["stage"]) {
+  uploadProgress.set(id, { progress: Math.max(0, Math.min(100, progress)), stage, updatedAt: Date.now() });
+}
+
+export function getTelegramUploadProgress(id: string) {
+  const value = uploadProgress.get(id);
+  if (!value) return null;
+  if (Date.now() - value.updatedAt > 30 * 60 * 1000) {
+    uploadProgress.delete(id);
+    return null;
+  }
+  return value;
+}
+
+export function clearTelegramUploadProgress(id: string) {
+  uploadProgress.delete(id);
+}
+
 type Pending2FA = {
   phoneCodeHash: string;
   phone: string;
@@ -306,7 +329,8 @@ class TelegramServiceImpl {
     buf: Buffer,
     mimeType: string,
     originalName: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number) => void,
+    uploadId?: string
   ): Promise<{
     messageId: number;
     fileId: string;
@@ -345,12 +369,16 @@ class TelegramServiceImpl {
         try {
           const sent = await this.client.sendFile(peer, {
           file: telegramFile,
-          progressCallback: onProgress,
+          progressCallback: (progress) => {
+            onProgress?.(progress);
+            if (uploadId) setTelegramUploadProgress(uploadId, Math.round(progress * 100), "telegram");
+          },
 
           caption: originalName,
           forceDocument: true,
           fileSize: buf.length,
         });
+          if (uploadId) setTelegramUploadProgress(uploadId, 100, "complete");
           return this.extractMessageRef(sent);
         } catch (err) {
           const waitSeconds = this.getFloodWaitSeconds(err);
