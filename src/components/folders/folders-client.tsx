@@ -28,6 +28,9 @@ type UploadItem = {
   progress: number;
   loadedBytes: number;
   speedBps: number;
+  telegramProgress: number;
+  telegramSpeedBps: number;
+  stage: "browser" | "telegram" | "processing" | "complete";
   error?: string;
   url?: string;
 };
@@ -211,6 +214,9 @@ export default function FoldersClient() {
           progress: 0,
           loadedBytes: 0,
           speedBps: 0,
+          telegramProgress: 0,
+          telegramSpeedBps: 0,
+          stage: "browser",
         };
       })
       .filter((item) => item.relativePath.split("/").length >= 2);
@@ -275,8 +281,12 @@ export default function FoldersClient() {
         return;
       }
       setCurrent(item.relativePath);
-      patch(item.id, { status: "uploading", progress: 0, loadedBytes: 0, speedBps: 0, error: undefined });
+      patch(item.id, { status: "uploading", progress: 0, loadedBytes: 0, speedBps: 0, telegramProgress: 0, telegramSpeedBps: 0, stage: "browser", error: undefined });
       const xhr = new XMLHttpRequest();
+      const uploadId = crypto.randomUUID();
+      let telegramTimer: number | null = null;
+      let lastTelegramProgress = 0;
+      let lastTelegramAt = performance.now();
       const startedAt = performance.now();
       let lastLoaded = 0;
       let lastSampleAt = startedAt;
@@ -286,6 +296,40 @@ export default function FoldersClient() {
       fd.append("storageChannelId", channelId);
       fd.append("folderId", String(folderId));
       fd.append("relativePath", item.relativePath);
+
+      const stopTelegramPolling = () => {
+        if (telegramTimer !== null) window.clearInterval(telegramTimer);
+        telegramTimer = null;
+      };
+      const startTelegramPolling = () => {
+        patch(item.id, { stage: "telegram", progress: 50, speedBps: 0 });
+        const poll = async () => {
+          try {
+            const response = await fetch(`/api/status?uploadId=${encodeURIComponent(uploadId)}`, { cache: "no-store" });
+            const json = await response.json();
+            const state = json.upload;
+            if (!state) return;
+            const now = performance.now();
+            const deltaSeconds = Math.max((now - lastTelegramAt) / 1000, 0.1);
+            const deltaProgress = Math.max(0, state.progress - lastTelegramProgress);
+            const telegramSpeedBps = (deltaProgress / 100) * item.file.size / deltaSeconds;
+            patch(item.id, {
+              telegramProgress: state.progress,
+              telegramSpeedBps: Number.isFinite(telegramSpeedBps) ? telegramSpeedBps : 0,
+              speedBps: Number.isFinite(telegramSpeedBps) ? telegramSpeedBps : 0,
+              stage: state.stage === "complete" ? "processing" : "telegram",
+              progress: state.stage === "complete" ? 98 : Math.min(95, 50 + Math.floor(state.progress * 0.45)),
+            });
+            lastTelegramProgress = state.progress;
+            lastTelegramAt = now;
+          } catch {
+            // The upload request itself remains authoritative; polling failure
+            // must never turn a successful Telegram upload into a client error.
+          }
+        };
+        void poll();
+        telegramTimer = window.setInterval(poll, 500);
+      };
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
@@ -297,13 +341,14 @@ export default function FoldersClient() {
           lastLoaded = event.loaded;
           lastSampleAt = now;
           patch(item.id, {
-            progress: Math.min(100, Math.floor((event.loaded / event.total) * 100)),
+            progress: Math.min(50, Math.floor((event.loaded / event.total) * 50)),
             loadedBytes: event.loaded,
             speedBps: smoothedSpeed,
           });
         }
       };
       xhr.onload = () => {
+        stopTelegramPolling();
         let json: any = {};
         try { json = JSON.parse(xhr.responseText || "{}"); } catch {}
         if (xhr.status >= 200 && xhr.status < 300 && json.success) {
@@ -319,9 +364,11 @@ export default function FoldersClient() {
         patch(item.id, { status: "failed", error: `${json.error || `HTTP_${xhr.status}`}${detail}` });
         resolve();
       };
-      xhr.onerror = () => { patch(item.id, { status: "failed", error: "NETWORK_ERROR" }); resolve(); };
-      xhr.onabort = () => { patch(item.id, { status: "failed", error: "CANCELLED" }); resolve(); };
+      xhr.onerror = () => { stopTelegramPolling(); patch(item.id, { status: "failed", error: "NETWORK_ERROR" }); resolve(); };
+      xhr.onabort = () => { stopTelegramPolling(); patch(item.id, { status: "failed", error: "CANCELLED" }); resolve(); };
       xhr.open("POST", "/api/files/upload");
+      xhr.setRequestHeader("X-Upload-Id", uploadId);
+      xhr.upload.addEventListener("load", startTelegramPolling, { once: true });
       xhr.send(fd);
     });
   }
@@ -403,7 +450,7 @@ export default function FoldersClient() {
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>Transfer speed: {stats.speedBps > 0 ? formatBytes(stats.speedBps) + "/s" : "—"}</span>
                 <span>ETA: {stats.etaSeconds !== null ? Math.floor(stats.etaSeconds / 60) + "m " + (stats.etaSeconds % 60) + "s" : "Calculating…"}</span>
-                <span>Browser → server</span>
+                <span>{currentItem ? (currentItem.stage === "browser" ? "Browser → server" : currentItem.stage === "telegram" ? "Server → Telegram" : "Finalizing upload") : "—"}</span>
               </div>
               {currentItem && (
                 <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
@@ -414,7 +461,11 @@ export default function FoldersClient() {
                   <Progress value={currentItem.progress} />
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{formatBytes(currentItem.loadedBytes)} / {formatBytes(currentItem.file.size)}</span>
-                    <span>{currentItem.loadedBytes >= currentItem.file.size ? "Processing on server…" : currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "Starting…"}</span>
+                    <span>{currentItem.stage === "browser"
+  ? (currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "Starting…")
+  : currentItem.stage === "telegram"
+    ? (currentItem.telegramSpeedBps > 0 ? formatBytes(currentItem.telegramSpeedBps) + "/s" : "Connecting…")
+    : currentItem.stage === "processing" ? "Finalizing…" : "Complete"}</span>
                   </div>
                 </div>
               )}
