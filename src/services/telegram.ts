@@ -15,6 +15,10 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { encryptSession, decryptSession } from "@/lib/crypto";
 import { logger } from "@/lib/logger";
+import { promises as fs } from "fs";
+import * as os from "os";
+import * as path from "path";
+import { randomBytes } from "crypto";
 
 export type TelegramStatus = "disconnected" | "connecting" | "connected" | "pending_2fa" | "error";
 
@@ -313,47 +317,68 @@ class TelegramServiceImpl {
 
     const peer = await this.resolvePeer(peerId);
 
-    // Use GramJS CustomFile so filename, size, and Buffer are passed explicitly.
-    // This avoids the generic upload path losing the Buffer on Node/Railway.
-    const telegramFile = new CustomFile(originalName, buf.length, "", buf);
+    // GramJS switches files over 20 MB to its chunked/large-file path and,
+    // in that path, CustomFile.path is required. A blank path causes the
+    // exact "Either one of buffer or filePath" error seen for 34.9 MB videos.
+    // Always provide a real temporary path for large uploads; keep the Buffer
+    // for smaller files so the common path stays memory-only.
+    const needsLargeFilePath = buf.length > 20 * 1024 * 1024;
+    const tempPath = needsLargeFilePath
+      ? path.join(os.tmpdir(), `telegram-upload-${randomBytes(8).toString("hex")}-${path.basename(originalName)}`)
+      : "";
+    if (needsLargeFilePath) {
+      await fs.writeFile(tempPath, buf);
+    }
+    const telegramFile = new CustomFile(
+      originalName,
+      buf.length,
+      tempPath,
+      needsLargeFilePath ? undefined : buf
+    );
 
     // Telegram may temporarily reject rapid uploads with FLOOD_WAIT.
     // Back off using the exact server-provided delay instead of returning a
     // misleading generic HTTP 502 to the browser.
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const sent = await this.client.sendFile(peer, {
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const sent = await this.client.sendFile(peer, {
           file: telegramFile,
           caption: originalName,
           forceDocument: true,
           fileSize: buf.length,
         });
-        return this.extractMessageRef(sent);
-      } catch (err) {
-        const waitSeconds = this.getFloodWaitSeconds(err);
-        if (waitSeconds != null && attempt < 2) {
-          logger.warn("Telegram upload rate limited; backing off", {
+          return this.extractMessageRef(sent);
+        } catch (err) {
+          const waitSeconds = this.getFloodWaitSeconds(err);
+          if (waitSeconds != null && attempt < 2) {
+            logger.warn("Telegram upload rate limited; backing off", {
             peerId,
             originalName,
             waitSeconds,
             attempt: attempt + 1,
-          });
-          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-          continue;
-        }
+            });
+            await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+            continue;
+          }
 
-        // A long-lived server can lose its MTProto socket between requests.
-        // Reconnect once and retry before surfacing the real Telegram error.
-        if (attempt === 0 && this.client && !this.client.connected) {
-          logger.warn("Telegram upload client disconnected; reconnecting", { originalName });
-          await this.ensureConnectedClient(true);
-          continue;
+          // A long-lived server can lose its MTProto socket between requests.
+          // Reconnect once and retry before surfacing the real Telegram error.
+          if (attempt === 0 && this.client && !this.client.connected) {
+            logger.warn("Telegram upload client disconnected; reconnecting", { originalName });
+            await this.ensureConnectedClient(true);
+            continue;
+          }
+          throw err;
         }
-        throw err;
+      }
+
+      throw new Error("Telegram upload failed after retries");
+    } finally {
+      if (tempPath) {
+        try { await fs.unlink(tempPath); } catch {}
       }
     }
-
-    throw new Error("Telegram upload failed after retries");
   }
 
   /**
