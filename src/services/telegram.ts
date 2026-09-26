@@ -305,7 +305,8 @@ class TelegramServiceImpl {
     peerId: string,
     buf: Buffer,
     mimeType: string,
-    originalName: string
+    originalName: string,
+    onProgress?: (progress: number) => void
   ): Promise<{
     messageId: number;
     fileId: string;
@@ -344,6 +345,8 @@ class TelegramServiceImpl {
         try {
           const sent = await this.client.sendFile(peer, {
           file: telegramFile,
+          progressCallback: onProgress,
+
           caption: originalName,
           forceDocument: true,
           fileSize: buf.length,
