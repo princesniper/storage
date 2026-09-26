@@ -8,7 +8,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { telegramService } from "@/services/telegram";
+import { telegramService, setTelegramUploadProgress, clearTelegramUploadProgress } from "@/services/telegram";
 import { audit } from "@/services/audit";
 import { cache } from "@/lib/cache";
 import { env, allowedMimeTypes, maxFileSizeBytes, maxVideoSizeBytes, isVideoMime } from "@/lib/env";
@@ -241,6 +241,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_RELATIVE_PATH" }, { status: 400 });
   }
   const relativePath = typeof relativePathRaw === "string" ? relativePathRaw.replaceAll("\\", "/").trim() : null;
+  const uploadId = req.headers.get("x-upload-id")?.trim() || null;
   if (relativePath && (relativePath.startsWith("/") || /^[A-Za-z]:\//.test(relativePath) || relativePath.split("/").some((p) => p === ".." || p === "." || p.includes("\0")))) {
     return NextResponse.json({ error: "INVALID_RELATIVE_PATH" }, { status: 400 });
   }
@@ -351,13 +352,16 @@ export async function POST(req: Request) {
 
   // Upload to Telegram
   const originalName = file.name || `upload-${Date.now()}`;
+  if (uploadId) setTelegramUploadProgress(uploadId, 0, "telegram");
   let upload;
   try {
     upload = await telegramService.uploadFile(
       channel.telegramChannelId,
       buf,
       detectedMime,
-      originalName
+      originalName,
+      undefined,
+      uploadId ?? undefined
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -370,8 +374,11 @@ export async function POST(req: Request) {
       errorMessage: msg,
       metadata: { channel: channel.name, originalName, size: buf.length },
     });
+    if (uploadId) setTelegramUploadProgress(uploadId, 0, "failed");
     return NextResponse.json({ error: "UPLOAD_FAILED", detail: msg }, { status: 502 });
   }
+
+  if (uploadId) setTelegramUploadProgress(uploadId, 100, "complete");
 
   // Legacy random publicId (kept so /i/ compat works uniformly for new files).
   // The canonical identifier is the sequential number allocated below.
