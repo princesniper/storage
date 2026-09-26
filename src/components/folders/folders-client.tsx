@@ -219,7 +219,7 @@ export default function FoldersClient() {
           speedBps: 0,
           telegramProgress: 0,
           telegramSpeedBps: 0,
-          stage: "browser",
+          stage: "browser" as const,
         };
       })
       .filter((item) => item.relativePath.split("/").length >= 2);
