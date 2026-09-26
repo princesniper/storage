@@ -110,6 +110,7 @@ function getRelativePath(file: File): string {
   return normalizeRelativePath(candidate || (file as File & { relativePath?: string }).relativePath || file.name);
 }
 
+// Railway source refresh marker.
 function progressFor(items: UploadItem[]) {
   const total = items.length;
   const uploaded = items.filter((i) => i.status === "success").length;
