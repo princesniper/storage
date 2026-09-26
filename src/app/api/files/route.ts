@@ -378,8 +378,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "UPLOAD_FAILED", detail: msg }, { status: 502 });
   }
 
-  if (uploadId) setTelegramUploadProgress(uploadId, 100, "complete");
-
   // Legacy random publicId (kept so /i/ compat works uniformly for new files).
   // The canonical identifier is the sequential number allocated below.
   let publicId = generatePublicId();
@@ -513,6 +511,8 @@ export async function POST(req: Request) {
       height,
     },
   });
+
+  if (uploadId) setTelegramUploadProgress(uploadId, 100, "complete");
 
   logger.info("upload ok", { sequenceNumber, publicId, channel: channel.name, size: buf.length, relativePath });
   if (relativePath) console.info("[FolderUpload] File record created", { relativePath, fileId: fileRow.id, folderId });
