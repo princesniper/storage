@@ -10,6 +10,7 @@
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram";
+import { CustomFile } from "telegram/client/uploads";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { encryptSession, decryptSession } from "@/lib/crypto";
@@ -312,9 +313,9 @@ class TelegramServiceImpl {
 
     const peer = await this.resolvePeer(peerId);
 
-    // Attach filename to buffer via custom file wrapper.
-    const fileWithMeta = buf as Buffer & { name?: string };
-    fileWithMeta.name = originalName;
+    // Use GramJS CustomFile so filename, size, and Buffer are passed explicitly.
+    // This avoids the generic upload path losing the Buffer on Node/Railway.
+    const telegramFile = new CustomFile(originalName, buf.length, "", buf);
 
     // Telegram may temporarily reject rapid uploads with FLOOD_WAIT.
     // Back off using the exact server-provided delay instead of returning a
@@ -322,7 +323,7 @@ class TelegramServiceImpl {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const sent = await this.client.sendFile(peer, {
-          file: fileWithMeta,
+          file: telegramFile,
           caption: originalName,
           forceDocument: true,
           fileSize: buf.length,
