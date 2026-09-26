@@ -21,11 +21,9 @@ export async function POST(req: Request, ctx: RouteContext) {
 
   // Folder share links use the app's Railway public domain, not the custom
   // media domain and never the container/request host (0.0.0.0:8080).
-  const railwayDomain = (process.env.RAILWAY_PUBLIC_DOMAIN ?? "growplants-media.up.railway.app")
-    .trim()
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "");
-  const publicOrigin = `https://${railwayDomain}`;
+  // This is intentionally fixed to the service's generated Railway domain.
+  // Do not use APP_URL, MEDIA_PUBLIC_URL, request origin, or custom media domain here.
+  const publicOrigin = "https://growplants-media.up.railway.app";
 
   return NextResponse.json({
     success: true,
