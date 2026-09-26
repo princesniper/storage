@@ -116,10 +116,12 @@ function progressFor(items: UploadItem[]) {
   const failed = items.filter((i) => i.status === "failed").length;
   const totalBytes = items.reduce((sum, i) => sum + i.file.size, 0);
   const uploadedBytes = items.reduce(
-    (sum, i) => sum + (i.status === "success" ? i.file.size : i.status === "uploading" ? i.loadedBytes : 0),
+    (sum, i) => sum + (i.status === "success" ? i.file.size : i.status === "uploading" ? i.file.size * (i.progress / 100) : 0),
     0
   );
   const active = items.filter((i) => i.status === "uploading");
+  // The overall bar follows the same stage-aware progress as the current file.
+  // Browser upload is 0-50%, Telegram is 50-95%, finalization is 95-100%.
   const percent = totalBytes ? Math.min(100, Math.floor((uploadedBytes / totalBytes) * 100)) : 0;
   const speedBps = active.reduce((sum, i) => sum + i.speedBps, 0);
   const remainingBytes = Math.max(0, totalBytes - uploadedBytes);
@@ -352,7 +354,16 @@ export default function FoldersClient() {
         let json: any = {};
         try { json = JSON.parse(xhr.responseText || "{}"); } catch {}
         if (xhr.status >= 200 && xhr.status < 300 && json.success) {
-          patch(item.id, { status: "success", progress: 100, loadedBytes: item.file.size, speedBps: 0, url: json.file?.url });
+          patch(item.id, {
+            status: "success",
+            progress: 100,
+            loadedBytes: item.file.size,
+            speedBps: 0,
+            telegramProgress: 100,
+            telegramSpeedBps: 0,
+            stage: "complete",
+            url: json.file?.url
+          });
           resolve();
           return;
         }
@@ -441,7 +452,7 @@ export default function FoldersClient() {
                 <div>
                   <div className="font-medium">Uploading folder: {rootName}</div>
                   <div className="text-sm text-muted-foreground">
-                    {stats.uploaded} / {stats.total} files · {stats.failed} failed · {formatBytes(stats.uploadedBytes)} / {formatBytes(stats.totalBytes)}
+                    {stats.uploaded} / {stats.total} files · {stats.failed} failed · {formatBytes(Math.min(stats.uploadedBytes, stats.totalBytes))} / {formatBytes(stats.totalBytes)}
                   </div>
                 </div>
                 <div className="text-2xl font-semibold tabular-nums">{stats.percent}%</div>
