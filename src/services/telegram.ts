@@ -155,22 +155,36 @@ class TelegramServiceImpl {
     } catch (err) {
       this.status = "error";
       this.lastError = err instanceof Error ? err.message : String(err);
+      if (this.client) {
+        try { await this.client.disconnect(); } catch {}
+      }
+      this.client = null;
       logger.error("TelegramService boot failed", { err: this.lastError });
     }
   }
 
   /**
    * Step 1 of connect flow: send OTP to phone.
+   *
+   * Always uses a fresh GramJS client. The normal production client may
+   * contain an already-authorized stored session and must not be reused
+   * for a new phone-number login flow.
    */
   async requestCode(phone: string): Promise<{ phoneCodeHash: string }> {
-    await this.ensureClient();
-    if (!this.client) throw new Error("Telegram client not ready");
-    const result = await this.client.sendCode(
-      { apiId: env.TELEGRAM_API_ID, apiHash: env.TELEGRAM_API_HASH },
-      phone
-    );
-    this.pending2FA = { phoneCodeHash: result.phoneCodeHash, phone };
-    return { phoneCodeHash: result.phoneCodeHash };
+    const normalizedPhone = phone.trim();
+    if (!normalizedPhone) throw new Error("Phone number is required");
+
+    if (this.client) {
+      try { await this.client.disconnect(); } catch {}
+      this.client = null;
+    }
+    this.bootPromise = null;
+    this.status = "connecting";
+    this.lastError = null;
+
+    const result = await this.ensureFreshClient(normalizedPhone);
+    this.pending2FA = { phoneCodeHash: result.phoneCodeHash, phone: normalizedPhone };
+    return result;
   }
 
   /**
@@ -474,18 +488,35 @@ class TelegramServiceImpl {
   }
 
   /**
-   * Ensure the client exists for code-request flow.
-   * If no stored session, creates a fresh client.
+   * Create a fresh, connected client for the phone-number OTP flow.
+   * This deliberately does not load the stored authorized session.
    */
-  private async ensureClient(): Promise<void> {
-    if (this.client) return;
-    this.client = new TelegramClient(
+  private async ensureFreshClient(phone: string): Promise<{ phoneCodeHash: string }> {
+    const client = new TelegramClient(
       new StringSession(""),
       env.TELEGRAM_API_ID,
       env.TELEGRAM_API_HASH,
       { connectionRetries: 5, useWSS: true }
     );
-    await this.client.connect();
+
+    try {
+      await client.connect();
+      if (!client.connected) {
+        throw new Error("Telegram client connected unsuccessfully");
+      }
+      const result = await client.sendCode(
+        { apiId: env.TELEGRAM_API_ID, apiHash: env.TELEGRAM_API_HASH },
+        phone
+      );
+      this.client = client;
+      this.status = "connecting";
+      return result;
+    } catch (err) {
+      try { await client.disconnect(); } catch {}
+      this.status = "error";
+      this.lastError = err instanceof Error ? err.message : String(err);
+      throw new Error("Telegram OTP request failed: " + this.lastError);
+    }
   }
 
   private async persistSession(phone: string, sessionString: string): Promise<void> {
