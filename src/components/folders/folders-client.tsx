@@ -117,9 +117,8 @@ function progressFor(items: UploadItem[]) {
     0
   );
   const active = items.filter((i) => i.status === "uploading");
-  const activeProgress = active.reduce((sum, i) => sum + i.progress / 100, 0);
-  const percent = total ? Math.floor(((uploaded + failed + activeProgress) / total) * 100) : 0;
-  const speedBps = active.reduce((max, i) => Math.max(max, i.speedBps), 0);
+  const percent = totalBytes ? Math.min(100, Math.floor((uploadedBytes / totalBytes) * 100)) : 0;
+  const speedBps = active.reduce((sum, i) => sum + i.speedBps, 0);
   const remainingBytes = Math.max(0, totalBytes - uploadedBytes);
   const etaSeconds = speedBps > 0 ? Math.ceil(remainingBytes / speedBps) : null;
   return { total, uploaded, failed, percent, totalBytes, uploadedBytes, speedBps, etaSeconds };
@@ -279,6 +278,9 @@ export default function FoldersClient() {
       patch(item.id, { status: "uploading", progress: 0, loadedBytes: 0, speedBps: 0, error: undefined });
       const xhr = new XMLHttpRequest();
       const startedAt = performance.now();
+      let lastLoaded = 0;
+      let lastSampleAt = startedAt;
+      let smoothedSpeed = 0;
       const fd = new FormData();
       fd.append("file", item.file, item.file.name);
       fd.append("storageChannelId", channelId);
@@ -287,12 +289,17 @@ export default function FoldersClient() {
 
       xhr.upload.onprogress = (event) => {
         if (event.lengthComputable) {
-          const elapsedSeconds = Math.max((performance.now() - startedAt) / 1000, 0.001);
-          const speedBps = event.loaded / elapsedSeconds;
+          const now = performance.now();
+          const sampleSeconds = Math.max((now - lastSampleAt) / 1000, 0.05);
+          const sampleBytes = Math.max(0, event.loaded - lastLoaded);
+          const instantSpeed = sampleBytes / sampleSeconds;
+          smoothedSpeed = smoothedSpeed === 0 ? instantSpeed : (smoothedSpeed * 0.7) + (instantSpeed * 0.3);
+          lastLoaded = event.loaded;
+          lastSampleAt = now;
           patch(item.id, {
-            progress: Math.round((event.loaded / event.total) * 100),
+            progress: Math.min(100, Math.floor((event.loaded / event.total) * 100)),
             loadedBytes: event.loaded,
-            speedBps,
+            speedBps: smoothedSpeed,
           });
         }
       };
@@ -300,7 +307,7 @@ export default function FoldersClient() {
         let json: any = {};
         try { json = JSON.parse(xhr.responseText || "{}"); } catch {}
         if (xhr.status >= 200 && xhr.status < 300 && json.success) {
-          patch(item.id, { status: "success", progress: 100, loadedBytes: item.file.size, speedBps: item.file.size / Math.max((performance.now() - startedAt) / 1000, 0.001), url: json.file?.url });
+          patch(item.id, { status: "success", progress: 100, loadedBytes: item.file.size, speedBps: 0, url: json.file?.url });
           resolve();
           return;
         }
@@ -394,8 +401,9 @@ export default function FoldersClient() {
               </div>
               <Progress value={stats.percent} />
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>Speed: {stats.speedBps > 0 ? formatBytes(stats.speedBps) + "/s" : "—"}</span>
-                <span>ETA: {stats.etaSeconds !== null ? Math.floor(stats.etaSeconds / 60) + "m " + (stats.etaSeconds % 60) + "s" : "—"}</span>
+                <span>Transfer speed: {stats.speedBps > 0 ? formatBytes(stats.speedBps) + "/s" : "—"}</span>
+                <span>ETA: {stats.etaSeconds !== null ? Math.floor(stats.etaSeconds / 60) + "m " + (stats.etaSeconds % 60) + "s" : "Calculating…"}</span>
+                <span>Browser → server</span>
               </div>
               {currentItem && (
                 <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
@@ -406,7 +414,7 @@ export default function FoldersClient() {
                   <Progress value={currentItem.progress} />
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{formatBytes(currentItem.loadedBytes)} / {formatBytes(currentItem.file.size)}</span>
-                    <span>{currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "—"}</span>
+                    <span>{currentItem.loadedBytes >= currentItem.file.size ? "Processing on server…" : currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "Starting…"}</span>
                   </div>
                 </div>
               )}
@@ -419,7 +427,7 @@ export default function FoldersClient() {
                 </div>
               )}
               {!uploading && stats.uploaded < stats.total && failedItems.length === 0 && <Button onClick={() => runQueue(false)}><UploadCloud className="mr-2 h-4 w-4" />Start Upload</Button>}
-              {uploading && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Uploading with {CONCURRENCY} concurrent workers…</div>}
+              {uploading && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{currentItem && currentItem.loadedBytes >= currentItem.file.size ? "Transfer complete — uploading to Telegram…" : `Transferring to server with ${CONCURRENCY} concurrent worker${CONCURRENCY === 1 ? "" : "s"}…`}</div>}
               {!uploading && <Button variant="outline" onClick={clearUpload}>Clear</Button>}
             </div>
           )}
