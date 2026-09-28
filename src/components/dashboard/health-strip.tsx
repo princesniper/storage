@@ -53,24 +53,24 @@ function HealthPill({ item }: { item: HealthItem }) {
 }
 
 interface HealthStripProps {
-  telegramStatus: string;
-  telegramError?: string | null;
+  storageStatus: string;
+  storageError?: string | null;
   cacheBackend: string;
   cacheEntries: number;
   redisKeys?: number;
 }
 
 export function HealthStrip({
-  telegramStatus,
-  telegramError,
+  storageStatus,
+  storageError,
   cacheBackend,
   cacheEntries,
   redisKeys,
 }: HealthStripProps) {
-  const tgStatus: HealthItem["status"] =
-    telegramStatus === "connected"
+  const storageStatus: HealthItem["status"] =
+    storageStatus === "connected"
       ? "ok"
-      : telegramStatus === "connecting" || telegramStatus === "pending_2fa"
+      : storageStatus === "connecting" || storageStatus === "pending_2fa"
         ? "warning"
         : "error";
 
@@ -81,10 +81,10 @@ export function HealthStrip({
 
   const items: HealthItem[] = [
     {
-      label: "Telegram",
-      status: tgStatus,
-      detail: tgStatus === "ok" ? "Connected" : telegramError ? "Offline" : telegramStatus.replace("_", " "),
-      icon: tgStatus === "ok" ? Wifi : WifiOff,
+      label: "Storage",
+      status: storageStatus,
+      detail: storageStatus === "ok" ? "Connected" : storageError ? "Offline" : storageStatus.replace("_", " "),
+      icon: storageStatus === "ok" ? Wifi : WifiOff,
     },
     {
       label: "Database",
