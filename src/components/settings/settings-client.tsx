@@ -20,14 +20,14 @@ import {
 import { Loader2, Phone, ShieldCheck, ShieldAlert, LogOut, Key, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PageHeader } from "@/components/ui/page-header";
-import { TelegramStatusBadge } from "@/components/ui/status-badge";
+import { StorageStatusBadge } from "@/components/ui/status-badge";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface Props {
   adminEmail: string;
-  telegramStatus: string;
-  telegramError?: string;
+  storageStatus: string;
+  storageError?: string;
   phoneReference?: string;
   lastConnectedAt?: string;
 }
@@ -39,7 +39,7 @@ const STEPS: { id: Exclude<Step, "idle">; label: string }[] = [
   { id: "2fa", label: "2FA" },
 ];
 
-export default function SettingsClient({ adminEmail, telegramStatus, telegramError, phoneReference, lastConnectedAt }: Props) {
+export default function SettingsClient({ adminEmail, storageStatus, storageError, phoneReference, lastConnectedAt }: Props) {
   const { toast } = useToast();
   const [step, setStep] = useState<Step>("phone");
   const [phone, setPhone] = useState("");
@@ -49,7 +49,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
   const [busy, setBusy] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  const connected = telegramStatus === "connected";
+  const connected = storageStatus === "connected";
 
   async function requestCode() {
     setBusy(true);
@@ -63,7 +63,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
       if (!r.ok) throw new Error(json.error ?? "Failed to send code");
       setPhoneCodeHash(json.phoneCodeHash);
       setStep("code");
-      toast({ title: "Code sent", description: "Check your Telegram app or SMS." });
+      toast({ title: "Code sent", description: "Check your authentication method or SMS." });
     } catch (e) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : "Unknown", variant: "destructive" });
     } finally {
@@ -83,9 +83,9 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
       if (!r.ok) throw new Error(json.error ?? "Verification failed");
       if (json.needs2fa) {
         setStep("2fa");
-        toast({ title: "2FA required", description: "Enter your Telegram 2FA password." });
+        toast({ title: "2FA required", description: "Enter your security password." });
       } else {
-        toast({ title: "Connected", description: "Telegram account linked successfully." });
+        toast({ title: "Connected", description: "Storage account linked successfully." });
         setStep("phone");
         setTimeout(() => window.location.reload(), 800);
       }
@@ -106,7 +106,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
       });
       const json = await r.json();
       if (!r.ok) throw new Error(json.error ?? "2FA failed");
-      toast({ title: "Connected", description: "Telegram account linked successfully." });
+      toast({ title: "Connected", description: "Storage account linked successfully." });
       setStep("phone");
       setPassword2fa("");
       setTimeout(() => window.location.reload(), 800);
@@ -158,10 +158,10 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
       <Card className="animate-page-enter" style={{ "--enter-delay": "60ms" } as React.CSSProperties}>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
-            <Phone className="size-4" aria-hidden /> Telegram Connection
+            <Phone className="size-4" aria-hidden /> Storage Connection
           </CardTitle>
           <CardDescription>
-            Your Telegram account is used as the storage backend. The session is encrypted at rest and never sent to the browser.
+            Your Storage account is used as the storage backend. The session is encrypted at rest and never sent to the browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -173,7 +173,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
                 <ShieldAlert className="size-4 text-amber-500" aria-hidden />
               )}
               <span className="text-sm font-medium">Status</span>
-              <TelegramStatusBadge status={telegramStatus} />
+              <StorageStatusBadge status={storageStatus} />
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {phoneReference && <span>Phone: <Badge variant="outline" className="font-mono">{phoneReference}</Badge></span>}
@@ -181,10 +181,10 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
             </div>
           </div>
 
-          {telegramError && (
+          {storageError && (
             <Alert variant="destructive">
-              <AlertTitle>Telegram error</AlertTitle>
-              <AlertDescription>{telegramError}</AlertDescription>
+              <AlertTitle>Storage error</AlertTitle>
+              <AlertDescription>Unable to access storage. Please try again.</AlertDescription>
             </Alert>
           )}
 
@@ -198,7 +198,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Disconnect Telegram?</AlertDialogTitle>
+                    <AlertDialogTitle>Disconnect storage?</AlertDialogTitle>
                     <AlertDialogDescription>
                       You will need to re-authenticate to upload again. Existing public URLs continue to work only if the Telegram session is restored before they are accessed.
                     </AlertDialogDescription>
@@ -242,7 +242,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
               {step === "code" && (
                 <div className="space-y-3 animate-page-enter">
                   <div className="space-y-2">
-                    <Label htmlFor="code">Telegram Login Code</Label>
+                    <Label htmlFor="code">Verification Code</Label>
                     <Input
                       id="code"
                       placeholder="12345"
@@ -255,7 +255,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
                       className="font-mono tracking-[0.3em] text-center text-lg"
                       onKeyDown={(e) => e.key === "Enter" && code && verifyCode()}
                     />
-                    <p className="text-xs text-muted-foreground">Sent to {phone || "your Telegram app"}. Check Telegram or SMS.</p>
+                    <p className="text-xs text-muted-foreground">Sent to {phone || "your Telegram app"}. Check your authentication method or SMS.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={verifyCode} disabled={busy || !code}>
@@ -269,7 +269,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
               {step === "2fa" && (
                 <div className="space-y-3 animate-page-enter">
                   <div className="space-y-2">
-                    <Label htmlFor="2fa">Telegram 2FA Password</Label>
+                    <Label htmlFor="2fa">Security Password</Label>
                     <Input
                       id="2fa"
                       type="password"
@@ -295,7 +295,7 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
           {!connected && (
             <p className="text-xs text-muted-foreground">
               Tip: Get <code className="font-mono mx-1">api_id</code> and <code className="font-mono mx-1">api_hash</code> from{" "}
-              <a className="underline underline-offset-2" href="https://my.telegram.org" target="_blank" rel="noreferrer">my.telegram.org</a>{" "}
+              <a className="underline underline-offset-2" href="https://your provider" target="_blank" rel="noreferrer">your provider</a>{" "}
               and set them in the server <code className="font-mono">.env</code>.
             </p>
           )}
@@ -304,9 +304,9 @@ export default function SettingsClient({ adminEmail, telegramStatus, telegramErr
 
       <Alert className="animate-page-enter" style={{ "--enter-delay": "120ms" } as React.CSSProperties}>
         <ShieldAlert className="size-4" aria-hidden />
-        <AlertTitle>About using a personal Telegram account as storage</AlertTitle>
+        <AlertTitle>About using a personal Storage account as storage</AlertTitle>
         <AlertDescription>
-          Telegram&apos;s terms of service are intended for messaging. Using a personal account as storage at scale is grey-area; for a single admin with low volume (e.g. product images) the risk is low but non-zero. Always back up the database — if the session or channel is revoked, public URLs may stop serving until re-connected.
+          Your storage connection is encrypted at rest and managed by the application. Keep your account credentials secure and maintain a database backup.
         </AlertDescription>
       </Alert>
     </div>
