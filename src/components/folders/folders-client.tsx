@@ -175,14 +175,20 @@ export default function FoldersClient() {
   const [channelId, setChannelId] = useState("");
   const folderIdsRef = useRef<Record<string, number> | null>(null);
 
-  const { data: channels = [] } = useQuery<{ id: number; name: string }[]>({
-    queryKey: ["storage-channels"],
+  const { data: channels = [], isLoading: channelsLoading, isError: channelsError } = useQuery<StorageChannel[]>({
+    queryKey: ["destinations"],
     queryFn: async () => {
-      const r = await fetch("/api/channels");
-      if (!r.ok) throw new Error("Failed to load storage channels");
+      const r = await fetch("/api/channels", { cache: "no-store" });
+      if (!r.ok) throw new Error("Failed to load storage destinations");
       const json = await r.json();
-      return (json.channels ?? []).filter((c: { status?: string }) => c.status !== "inactive");
+
+      // /api/channels returns the canonical destination collection as
+      // "destinations". Only active destinations are valid upload targets.
+      return (json.destinations ?? []).filter(
+        (channel: StorageChannel) => channel?.status === "active"
+      );
     },
+    staleTime: 0,
   });
 
   const router = useRouter();
