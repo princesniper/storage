@@ -99,7 +99,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
   const toggleCollapsed = () => setCollapsedRaw(collapsed ? "0" : "1");
   const adminEmail = (session?.user as { email?: string } | undefined)?.email ?? "";
   const adminInitial = adminEmail ? adminEmail[0].toUpperCase() : "A";
-  const handleSignOut = () => signOut({ callbackUrl: "/login" });
+  const handleSignOut = () => signOut({ callbackUrl: "https://growplants-media.up.railway.app/login" });
 
   // Cmd+K / Ctrl+K global shortcut
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
