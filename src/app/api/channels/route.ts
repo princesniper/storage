@@ -25,9 +25,10 @@ export async function GET() {
   });
 
   return NextResponse.json({
-    channels: channels.map((c) => ({
+    destinations: channels.map((c) => ({
       id: c.id,
       name: c.name,
+      telegramChannelId: c.telegramChannelId,
       destinationId: c.telegramChannelId,
       purpose: c.purpose,
       status: c.status,
@@ -37,6 +38,7 @@ export async function GET() {
       _count: { files: c._count.files },
     })),
     storageStatus: telegramService.getStatus(),
+    telegramStatus: telegramService.getStatus(),
   });
 }
 
