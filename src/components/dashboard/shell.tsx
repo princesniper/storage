@@ -62,7 +62,7 @@ function isActive(pathname: string | null, href: string) {
   return pathname === href || pathname?.startsWith(href + "/");
 }
 
-function useTelegramStatus() {
+function useStorageStatus() {
   const [status, setStatus] = useState<string>("unknown");
 
   useEffect(() => {
@@ -93,7 +93,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
   const collapsed = collapsedRaw === "1";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const tgStatus = useTelegramStatus();
+  const storageStatus = useStorageStatus();
 
   const toggleCollapsed = () => setCollapsedRaw(collapsed ? "0" : "1");
   const adminEmail = (session?.user as { email?: string } | undefined)?.email ?? "";
@@ -120,7 +120,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
     setMounted(true);
   }, []);
 
-  const tgConnected = tgStatus === "connected";
+  const storageConnected = storageStatus === "connected";
 
   return (
     <div className="min-h-screen flex bg-background text-foreground">
@@ -209,21 +209,21 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
 
         {/* Footer: Telegram pill + admin widget */}
         <div className={cn("border-t border-border p-2.5 space-y-2", collapsed && "flex flex-col items-center")}>
-          {/* Telegram status pill */}
+          {/* Storage status pill */}
           {!collapsed ? (
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
               <span className={cn(
                 "size-2 rounded-full shrink-0 transition-colors",
-                tgConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
+                storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
               )} aria-hidden />
               <span className="text-xs font-medium text-muted-foreground flex-1 truncate">
                 Telegram
               </span>
               <span className={cn(
                 "text-[10px] font-medium tracking-wide",
-                tgConnected ? "text-emerald-400" : "text-red-400"
+                storageConnected ? "text-emerald-400" : "text-red-400"
               )}>
-                {tgConnected ? "Connected" : tgStatus === "unknown" ? "Checking…" : "Offline"}
+                {storageConnected ? "Connected" : storageStatus === "unknown" ? "Checking…" : "Offline"}
               </span>
             </div>
           ) : (
@@ -231,16 +231,16 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
               <TooltipTrigger asChild>
                 <div className={cn(
                   "size-9 rounded-lg flex items-center justify-center cursor-default border",
-                  tgConnected ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"
+                  storageConnected ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"
                 )}>
-                  {tgConnected
+                  {storageConnected
                     ? <Wifi className="size-3.5 text-emerald-400" aria-hidden />
                     : <WifiOff className="size-3.5 text-red-400" aria-hidden />
                   }
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">
-                Telegram: {tgConnected ? "Connected" : "Offline"}
+                Storage: {storageConnected ? "Connected" : "Offline"}
               </TooltipContent>
             </Tooltip>
           )}
@@ -406,11 +406,11 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
               <span className={cn(
                 "size-2 rounded-full shrink-0",
-                tgConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
+                storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
               )} aria-hidden />
-              <span className="text-xs text-muted-foreground flex-1">Telegram</span>
-              <span className={cn("text-[10px] font-medium", tgConnected ? "text-emerald-400" : "text-red-400")}>
-                {tgConnected ? "Connected" : "Offline"}
+              <span className="text-xs text-muted-foreground flex-1">Storage</span>
+              <span className={cn("text-[10px] font-medium", storageConnected ? "text-emerald-400" : "text-red-400")}>
+                {storageConnected ? "Connected" : "Offline"}
               </span>
             </div>
             {/* Admin */}
