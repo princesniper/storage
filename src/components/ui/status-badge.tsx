@@ -89,7 +89,7 @@ export function AuditStatusBadge({ status }: { status: string }) {
 }
 
 /** Telegram connection status → tone mapping (5-color model). */
-export function TelegramStatusBadge({ status }: { status: string }) {
+export function StorageStatusBadge({ status }: { status: string }) {
   const tone: Tone =
     status === "connected"
       ? "completed"
