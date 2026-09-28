@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (sessionStatus === "authenticated" && session?.user) {
+      router.replace("/dashboard");
+    }
+  }, [sessionStatus, session, router]);
+
+  if (sessionStatus === "loading" || sessionStatus === "authenticated") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" aria-label="Loading" />
+      </div>
+    );
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
