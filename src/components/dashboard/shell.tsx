@@ -208,7 +208,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
 
         {sidebarExtra && !collapsed && <div className="px-2.5 pb-2">{sidebarExtra}</div>}
 
-        {/* Footer: Telegram pill + admin widget */}
+        {/* Footer: storage status + admin widget */}
         <div className={cn("border-t border-border p-2.5 space-y-2", collapsed && "flex flex-col items-center")}>
           {/* Storage status pill */}
           {!collapsed ? (
@@ -324,12 +324,12 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             {/* Command palette trigger */}
             <button
               onClick={() => setPaletteOpen(true)}
-              className="hidden md:flex items-center gap-2 h-8 px-3 rounded-lg border border-border bg-muted/40 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-150 text-muted-foreground text-sm"
+              className="hidden md:flex items-center gap-2 h-8 px-3 rounded-lg border border-border bg-muted/40 hover:bg-accent hover:border-border transition-all duration-150 text-muted-foreground text-sm"
               aria-label="Open command palette (Ctrl+K)"
             >
               <Search className="size-3.5" aria-hidden />
               <span className="text-xs">Search…</span>
-              <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/[0.06] border border-border leading-none">
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted border border-border leading-none">
                 ⌘K
               </kbd>
             </button>
@@ -356,7 +356,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
 
       {/* ─── Mobile drawer ─── */}
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent side="left" className="w-72 p-0 flex flex-col bg-[#0d0d0f]">
+        <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
           <SheetHeader className="px-4 py-4 border-b border-border text-left">
             <div className="flex items-center gap-2.5">
               <div className="size-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
@@ -404,7 +404,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             ))}
           </nav>
           <div className="border-t border-border p-3 space-y-2">
-            {/* Telegram status */}
+            {/* Storage status */}
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0",
