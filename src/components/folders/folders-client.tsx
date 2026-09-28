@@ -175,7 +175,7 @@ export default function FoldersClient() {
   const [channelId, setChannelId] = useState("");
   const folderIdsRef = useRef<Record<string, number> | null>(null);
 
-  const { data: channels = [], isLoading: channelsLoading, isError: channelsError } = useQuery<StorageChannel[]>({
+  const { data: channels = [] } = useQuery<StorageChannel[]>({
     queryKey: ["destinations"],
     queryFn: async () => {
       const r = await fetch("/api/channels", { cache: "no-store" });
