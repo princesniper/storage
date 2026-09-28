@@ -19,7 +19,9 @@ type FolderItem = {
   fileCount: number;
 };
 
-type StorageChannel = { id: number; name: string; status: string; };\n\ntype UploadItem = {
+type StorageChannel = { id: number; name: string; status: string; };
+
+type UploadItem = {
   id: string;
   file: File;
   relativePath: string;
