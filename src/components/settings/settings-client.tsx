@@ -292,9 +292,6 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
               )}
             </div>
           )}
-          {!connected && (
-            
-          )}
         </CardContent>
       </Card>
 
