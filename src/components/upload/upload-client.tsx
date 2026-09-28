@@ -16,8 +16,8 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { formatBytes, isVideoMime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-interface ChannelRow { id: number; name: string; }
-interface ChannelList { channels: ChannelRow[]; }
+interface ChannelRow { id: number; name: string; status: string; }
+interface ChannelList { destinations: ChannelRow[]; storageStatus?: string; }
 
 // No app-level folder/batch storage cap. Upload concurrency is intentionally bounded
 // to keep the browser and storage connection stable while allowing any number of files.
@@ -83,8 +83,8 @@ export default function UploadClient() {
     },
   });
 
-  const channels = data?.channels?.filter((c) => c) ?? [];
-  const activeChannels = channels;
+  // /api/channels returns destinations; only active destinations are valid upload targets.
+  const activeChannels = data?.destinations?.filter((c) => c && c.status === "active") ?? [];
 
   const addFiles = useCallback((list: FileList | File[]) => {
     const arr = Array.from(list);
