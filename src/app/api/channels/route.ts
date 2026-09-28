@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_REQUEST", detail: msg }, { status: 400 });
   }
 
-  // Telegram must be connected
+  await telegramService.ensureStarted();
   if (telegramService.getStatus() !== "connected") {
     return NextResponse.json({ error: "STORAGE_NOT_CONNECTED" }, { status: 400 });
   }
@@ -78,7 +78,7 @@ export async function POST(req: Request) {
   const test = await telegramService.testChannel(parsed.destinationId);
   if (!test.ok) {
     return NextResponse.json(
-      { error: "CHANNEL_ACCESS_FAILED", detail: test.error ?? "Could not access channel" },
+      { error: "CHANNEL_ACCESS_FAILED", detail: "Unable to access the storage destination." },
       { status: 400 }
     );
   }
