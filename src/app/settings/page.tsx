@@ -10,9 +10,17 @@ import SettingsClient from "@/components/settings/settings-client";
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
   await telegramService.ensureStarted();
-  const tg = await db.telegramAccount.findFirst();
-  const tgStatus = telegramService.getStatus();
-  const tgError = telegramService.getLastError();
+  const tg = await db.telegramAccount.findFirst({
+    orderBy: { updatedAt: "desc" },
+  });
+  const hasStoredSession = Boolean(
+    tg?.sessionCipher && tg.sessionIV && tg.sessionAuthTag
+  );
+  const tgStatus =
+    hasStoredSession && telegramService.getStatus() === "connected"
+      ? "connected"
+      : "disconnected";
+  const tgError = tgStatus === "connected" ? null : telegramService.getLastError();
 
   return (
     <DashboardShell>
