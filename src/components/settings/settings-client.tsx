@@ -293,11 +293,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
             </div>
           )}
           {!connected && (
-            <p className="text-xs text-muted-foreground">
-              Tip: Get <code className="font-mono mx-1">api_id</code> and <code className="font-mono mx-1">api_hash</code> from{" "}
-              <a className="underline underline-offset-2" href="https://example.invalid" target="_blank" rel="noreferrer">your storage provider</a>{" "}
-              and set them in the server <code className="font-mono">.env</code>.
-            </p>
+            
           )}
         </CardContent>
       </Card>
