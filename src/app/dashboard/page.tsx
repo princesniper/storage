@@ -92,6 +92,7 @@ export default async function DashboardPage() {
     }),
   ]);
 
+  await telegramService.ensureStarted();
   const storageStatus = telegramService.getStatus();
   const storageError = telegramService.getLastError();
   const cacheStats = await cache.stats();
@@ -267,8 +268,8 @@ export default async function DashboardPage() {
           <SectionLabel>Storage Overview</SectionLabel>
           <div className="animate-page-enter" style={{ "--enter-delay": "60ms" } as React.CSSProperties}>
             <HealthStrip
-              telegramStatus={storageStatus}
-              telegramError={storageError}
+              storageStatus={storageStatus}
+              storageError={storageError}
               cacheBackend={cacheStats.backend}
               cacheEntries={cacheStats.bytesSize}
               redisKeys={cacheStats.redisKeys}
