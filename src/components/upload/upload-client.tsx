@@ -20,7 +20,7 @@ interface ChannelRow { id: number; name: string; }
 interface ChannelList { channels: ChannelRow[]; }
 
 // No app-level folder/batch storage cap. Upload concurrency is intentionally bounded
-// to keep the browser and Telegram connection stable while allowing any number of files.
+// to keep the browser and storage connection stable while allowing any number of files.
 const CONCURRENCY = 3;
 const MAX_RETRIES_ON_429 = 3;
 const RETRY_WAIT_S = 5;
