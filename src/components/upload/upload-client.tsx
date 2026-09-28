@@ -50,7 +50,7 @@ let keyCounter = 0;
 function friendlyUploadError(raw: string, httpStatus?: number): string {
   const code = (raw ?? "").toUpperCase();
   if (code.includes("RATE_LIMIT")) return "Rate limited — backing off briefly, then retrying automatically.";
-  if (code.includes("TELEGRAM_NOT_CONNECTED")) return "Telegram storage is offline. Reconnect it in Settings, then retry.";
+  if (code.includes("TELEGRAM_NOT_CONNECTED")) return "Storage is offline. Reconnect it in Settings, then retry.";
   if (code.includes("FILE_TOO_LARGE")) return "This file exceeds the size limit for its type. Split or compress it and retry.";
   if (code.includes("UNSUPPORTED_MIME") || code.includes("EMPTY_FILE")) return "This file type or empty file isn't supported for storage.";
   if (code.includes("CHANNEL_NOT_FOUND")) return "The selected storage channel is no longer available. Pick another destination.";
@@ -222,7 +222,7 @@ export default function UploadClient() {
   const startUpload = async () => {
     if (items.length === 0) return;
     if (!channelId) {
-      toast({ title: "Choose a storage destination", description: "Pick a Telegram channel before uploading.", variant: "destructive" });
+      toast({ title: "Choose a storage destination", description: "Pick a storage destination before uploading.", variant: "destructive" });
       return;
     }
     abortRef.current = false;
@@ -286,7 +286,7 @@ export default function UploadClient() {
           <AlertCircle className="size-4" aria-hidden />
           <AlertTitle>No active storage channels</AlertTitle>
           <AlertDescription>
-            Add a Telegram storage channel first before uploading.
+            Add a storage destination first before uploading.
             <Button size="sm" variant="link" onClick={() => router.push("/channels")}>
               Go to Storage Channels
             </Button>
