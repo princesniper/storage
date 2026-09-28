@@ -26,7 +26,7 @@ export async function GET() {
     channels: channels.map((c) => ({
       id: c.id,
       name: c.name,
-      telegramChannelId: c.telegramChannelId,
+      destinationId: c.telegramChannelId,
       purpose: c.purpose,
       status: c.status,
       lastTestedAt: c.lastTestedAt,
@@ -34,7 +34,7 @@ export async function GET() {
       lastTestError: c.lastTestError,
       _count: { files: c._count.files },
     })),
-    telegramStatus: telegramService.getStatus(),
+    storageStatus: telegramService.getStatus(),
   });
 }
 
@@ -42,7 +42,7 @@ const postBody = z.object({
   name: z.string().min(1).max(100),
   telegramChannelId: z
     .string()
-    .regex(/^-100\d{8,}$/, "Must be a valid Telegram channel ID (e.g. -1001234567890)"),
+    .regex(/^-100\d{8,}$/, "Invalid storage destination identifier"),
   purpose: z.string().max(500).optional(),
 });
 
@@ -61,7 +61,7 @@ export async function POST(req: Request) {
 
   // Telegram must be connected
   if (telegramService.getStatus() !== "connected") {
-    return NextResponse.json({ error: "TELEGRAM_NOT_CONNECTED" }, { status: 400 });
+    return NextResponse.json({ error: "STORAGE_NOT_CONNECTED" }, { status: 400 });
   }
 
   // Uniqueness check
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
   // Find the TelegramAccount row (V1: single account)
   const acc = await db.telegramAccount.findFirst({ orderBy: { updatedAt: "desc" } });
   if (!acc) {
-    return NextResponse.json({ error: "NO_TELEGRAM_ACCOUNT" }, { status: 400 });
+    return NextResponse.json({ error: "NO_STORAGE_ACCOUNT" }, { status: 400 });
   }
 
   const channel = await db.storageChannel.create({
