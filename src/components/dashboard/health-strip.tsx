@@ -67,7 +67,7 @@ export function HealthStrip({
   cacheEntries,
   redisKeys,
 }: HealthStripProps) {
-  const storageStatus: HealthItem["status"] =
+  const statusTone: HealthItem["status"] =
     storageStatus === "connected"
       ? "ok"
       : storageStatus === "connecting" || storageStatus === "pending_2fa"
@@ -82,9 +82,9 @@ export function HealthStrip({
   const items: HealthItem[] = [
     {
       label: "Storage",
-      status: storageStatus,
-      detail: storageStatus === "ok" ? "Connected" : storageError ? "Offline" : storageStatus.replace("_", " "),
-      icon: storageStatus === "ok" ? Wifi : WifiOff,
+      status: statusTone,
+      detail: statusTone === "ok" ? "Connected" : storageError ? "Offline" : storageStatus.replace("_", " "),
+      icon: statusTone === "ok" ? Wifi : WifiOff,
     },
     {
       label: "Database",
