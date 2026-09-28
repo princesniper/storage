@@ -9,6 +9,7 @@ import SettingsClient from "@/components/settings/settings-client";
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
+  await telegramService.ensureStarted();
   const tg = await db.telegramAccount.findFirst();
   const tgStatus = telegramService.getStatus();
   const tgError = telegramService.getLastError();
@@ -17,8 +18,8 @@ export default async function SettingsPage() {
     <DashboardShell>
       <SettingsClient
         adminEmail={session?.user?.email ?? ""}
-        telegramStatus={tgStatus}
-        telegramError={tgError ?? undefined}
+        storageStatus={tgStatus}
+        storageError={tgError ?? undefined}
         phoneReference={tg?.phoneReference ?? undefined}
         lastConnectedAt={tg?.lastConnectedAt?.toISOString() ?? undefined}
       />
