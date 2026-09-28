@@ -11,7 +11,15 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   await telegramService.ensureStarted();
-  const status = telegramService.getStatus();
+  const account = await (await import("@/lib/db")).db.telegramAccount.findFirst({
+    orderBy: { updatedAt: "desc" },
+  });
+  const hasStoredSession = Boolean(
+    account?.sessionCipher && account.sessionIV && account.sessionAuthTag
+  );
+  const status = hasStoredSession && telegramService.getStatus() === "connected"
+    ? "connected"
+    : "disconnected";
   const connected = status === "connected";
   return NextResponse.json({
     status,
