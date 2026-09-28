@@ -34,7 +34,7 @@ import {
   LayoutGrid,
 } from "lucide-react";
 import { StorageOverview, UploadActivity } from "@/components/dashboard/analytics-widgets";
-import { FileStatusBadge, AuditStatusBadge, TelegramStatusBadge } from "@/components/ui/status-badge";
+import { FileStatusBadge, AuditStatusBadge, StorageStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CopyButton } from "@/components/ui/copy-button";
 
@@ -92,10 +92,10 @@ export default async function DashboardPage() {
     }),
   ]);
 
-  const tgStatus = telegramService.getStatus();
-  const tgError = telegramService.getLastError();
+  const storageStatus = telegramService.getStatus();
+  const storageError = telegramService.getLastError();
   const cacheStats = await cache.stats();
-  const tgConnected = tgStatus === "connected";
+  const storageConnected = storageStatus === "connected";
 
   const failedTestChannels = channels.filter((c) => c.lastTestOk === false);
   const inactiveChannels = channels.filter((c) => c.status !== "active");
@@ -108,11 +108,11 @@ export default async function DashboardPage() {
     href: string;
     action: string;
   }[] = [];
-  if (!tgConnected) {
+  if (!storageConnected) {
     issues.push({
       icon: WifiOff,
-      title: "Telegram disconnected",
-      detail: tgError ?? `Session state: ${tgStatus.replace("_", " ")}. Uploads and media serving are degraded.`,
+      title: "Storage disconnected",
+      detail: storageError ?? `Session state: ${storageStatus.replace("_", " ")}. Uploads and media serving are degraded.`,
       href: "/settings",
       action: "Open settings",
     });
@@ -129,7 +129,7 @@ export default async function DashboardPage() {
   if (missingFiles > 0) {
     issues.push({
       icon: FileWarning,
-      title: `${missingFiles.toLocaleString()} file${missingFiles === 1 ? "" : "s"} missing from Telegram`,
+      title: `${missingFiles.toLocaleString()} file${missingFiles === 1 ? "" : "s"} missing from storage`,
       detail: "Messages were deleted or became unreachable. Public URLs return 404.",
       href: "/files",
       action: "Open library",
@@ -145,7 +145,7 @@ export default async function DashboardPage() {
     });
   }
 
-  const statusLine = !tgConnected
+  const statusLine = !storageConnected
     ? "Infrastructure attention required — see action items below."
     : issues.length > 0
       ? `${issues.length} operational issue${issues.length === 1 ? "" : "s"} need${issues.length === 1 ? "s" : ""} attention.`
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
               label="Active Channels"
               value={activeChannels}
               countUp
-              sub={tgConnected ? "Telegram connected" : `Telegram ${tgStatus.replace("_", " ")}`}
+              sub={storageConnected ? "Storage connected" : `Storage ${storageStatus.replace("_", " ")}`}
               href="/channels"
               delay={120}
             />
@@ -228,7 +228,7 @@ export default async function DashboardPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium">No action required</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Telegram connected · no failed uploads in 24h · no missing files · all channel tests passing.
+                    Storage connected · no failed uploads in 24h · no missing files · all channel tests passing.
                   </p>
                 </div>
               </CardContent>
@@ -267,8 +267,8 @@ export default async function DashboardPage() {
           <SectionLabel>Storage Overview</SectionLabel>
           <div className="animate-page-enter" style={{ "--enter-delay": "60ms" } as React.CSSProperties}>
             <HealthStrip
-              telegramStatus={tgStatus}
-              telegramError={tgError}
+              telegramStatus={storageStatus}
+              telegramError={storageError}
               cacheBackend={cacheStats.backend}
               cacheEntries={cacheStats.bytesSize}
               redisKeys={cacheStats.redisKeys}
@@ -277,19 +277,19 @@ export default async function DashboardPage() {
           <StorageOverview />
 
           <div className="grid gap-4 md:grid-cols-2">
-            {/* Telegram storage */}
+            {/* storage */}
             <Card tier="informational" className="animate-page-enter">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <Database className="size-4 text-muted-foreground" aria-hidden />
-                  Telegram Storage
+                  Storage
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <dl className="text-xs space-y-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Connection</dt>
-                    <dd><TelegramStatusBadge status={tgStatus} /></dd>
+                    <dd><StorageStatusBadge status={storageStatus} /></dd>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Channels</dt>
@@ -402,7 +402,7 @@ export default async function DashboardPage() {
                 <EmptyState
                   icon={ImageIcon}
                   title="No files uploaded yet"
-                  description="Upload your first image or video to a Telegram storage channel."
+                  description="Upload your first image or video to a storage destination."
                   action={
                     <Button size="sm" asChild>
                       <a href="/upload">
