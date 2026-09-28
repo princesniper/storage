@@ -4,12 +4,8 @@
 @custom-variant dark (&:is(.dark *));
 
 /* GrowPlants Media is dark-first infrastructure */
-html {
-  color-scheme: dark;
-}
-html:not(.light) {
-  background: #09090b;
-}
+html { color-scheme: light; background: var(--background); }
+html.dark { color-scheme: dark; }
 
 @theme inline {
   --color-background: var(--background);
@@ -104,6 +100,40 @@ html:not(.light) {
   --status-exception: #ef4444;
 }
 
+/* Light theme */
+html:not(.dark) {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #16a34a;
+  --primary-foreground: #f0fdf4;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #e2e8f0;
+  --accent-foreground: #166534;
+  --destructive: #dc2626;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #16a34a;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #16a34a;
+  --sidebar-primary-foreground: #f0fdf4;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #166534;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #16a34a;
+  --status-waiting: #d97706;
+  --status-processing: #0f766e;
+  --status-transit: #0284c7;
+  --status-completed: #16a34a;
+  --status-exception: #dc2626;
+}
 .dark {
   --background: #09090b;
   --foreground: #f4f4f5;
@@ -308,7 +338,7 @@ html:not(.light) {
 }
 
 .glass-panel {
-  background: rgba(17, 17, 19, 0.82);
+  background: color-mix(in srgb, var(--card) 88%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
