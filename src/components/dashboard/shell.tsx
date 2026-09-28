@@ -25,6 +25,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useLocalStorageState } from "@/hooks/use-local-storage-state";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "@/components/dashboard/command-palette";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 const NAV_GROUPS = [
   {
@@ -130,7 +131,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
       <aside
         className={cn(
           "hidden md:flex flex-col border-r border-border transition-[width] duration-250 ease-out overflow-hidden shrink-0",
-          "bg-[#0d0d0f]",
+          "bg-sidebar",
           collapsed ? "w-[4.25rem]" : "w-60"
         )}
         aria-label="Primary navigation"
@@ -174,7 +175,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                         collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
                         active
                           ? "bg-emerald-500/10 text-emerald-400"
-                          : "text-muted-foreground hover:bg-white/5 hover:text-foreground active:scale-[0.98]"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground active:scale-[0.98]"
                       )}
                     >
                       {active && (
@@ -211,13 +212,13 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
         <div className={cn("border-t border-border p-2.5 space-y-2", collapsed && "flex flex-col items-center")}>
           {/* Storage status pill */}
           {!collapsed ? (
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0 transition-colors",
                 storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
               )} aria-hidden />
               <span className="text-xs font-medium text-muted-foreground flex-1 truncate">
-                Telegram
+                Storage
               </span>
               <span className={cn(
                 "text-[10px] font-medium tracking-wide",
@@ -269,7 +270,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-9 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  className="size-9 text-muted-foreground hover:text-foreground hover:bg-accent"
                   onClick={toggleCollapsed}
                   aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
@@ -283,7 +284,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-9 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  className="size-9 text-muted-foreground hover:text-foreground hover:bg-accent"
                   onClick={handleSignOut}
                   aria-label="Sign out"
                 >
@@ -323,15 +324,16 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             {/* Command palette trigger */}
             <button
               onClick={() => setPaletteOpen(true)}
-              className="hidden md:flex items-center gap-2 h-8 px-3 rounded-lg border border-border bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-150 text-muted-foreground text-sm"
+              className="hidden md:flex items-center gap-2 h-8 px-3 rounded-lg border border-border bg-muted/40 hover:bg-white/[0.06] hover:border-white/[0.12] transition-all duration-150 text-muted-foreground text-sm"
               aria-label="Open command palette (Ctrl+K)"
             >
               <Search className="size-3.5" aria-hidden />
               <span className="text-xs">Search…</span>
-              <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] leading-none">
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-white/[0.06] border border-border leading-none">
                 ⌘K
               </kbd>
             </button>
+            <ThemeToggle />
             <Button
               size="icon"
               variant="ghost"
@@ -389,7 +391,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                           "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-11",
                           active
                             ? "bg-emerald-500/10 text-emerald-400"
-                            : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
                         )}
                       >
                         <n.icon className="size-4 shrink-0" aria-hidden />
@@ -403,7 +405,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
           </nav>
           <div className="border-t border-border p-3 space-y-2">
             {/* Telegram status */}
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0",
                 storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
