@@ -60,13 +60,13 @@ export default function ChannelsClient() {
     onSuccess: (data) => {
       toast({
         title: data.ok ? "Connection OK" : "Connection failed",
-        description: data.ok ? `Latency ${data.latencyMs}ms` : data.error,
+        description: data.ok ? `Latency ${data.latencyMs}ms` : "Unable to access this storage destination.",
         variant: data.ok ? "default" : "destructive",
       });
       qc.invalidateQueries({ queryKey: ["destinations"] });
     },
     onError: (e: Error) => {
-      toast({ title: "Connection test failed", description: e.message, variant: "destructive" });
+      toast({ title: "Connection test failed", description: "Unable to complete the storage operation. Please try again.", variant: "destructive" });
     },
   });
 
@@ -236,7 +236,7 @@ function ChannelCard({
         <dl className="text-xs space-y-2">
           {/* Destination ID with copy button */}
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground shrink-0">Destination ID</dt>
+            <dt className="text-muted-foreground shrink-0">Storage ID</dt>
             <dd className="flex items-center gap-1.5 min-w-0">
               <code className="font-mono bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded text-[11px] truncate max-w-[140px]">
                 {c.telegramChannelId}
@@ -364,7 +364,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Channel" : "Add Storage Destination"}</DialogTitle>
           <DialogDescription>
-            Register an existing private storage destination,
+            Register an existing storage destination,
             then paste its destination ID (enter the destination identifier provided by your storage setup).
           </DialogDescription>
         </DialogHeader>
@@ -377,7 +377,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
             <Label htmlFor="ch-id">Storage Destination ID</Label>
             <Input
               id="ch-id"
-              placeholder="-1001234567890"
+              placeholder="Enter storage destination ID"
               value={destinationId}
               onChange={(e) => setChannelId(e.target.value)}
               disabled={!!editing}
