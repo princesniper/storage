@@ -40,7 +40,7 @@ export async function GET() {
 
 const postBody = z.object({
   name: z.string().min(1).max(100),
-  telegramChannelId: z
+  destinationId: z
     .string()
     .regex(/^-100\d{8,}$/, "Invalid storage destination identifier"),
   purpose: z.string().max(500).optional(),
@@ -66,14 +66,14 @@ export async function POST(req: Request) {
 
   // Uniqueness check
   const dup = await db.storageChannel.findFirst({
-    where: { telegramChannelId: parsed.telegramChannelId },
+    where: { telegramChannelId: parsed.destinationId },
   });
   if (dup) {
     return NextResponse.json({ error: "CHANNEL_ALREADY_REGISTERED" }, { status: 409 });
   }
 
   // Verify access to the channel
-  const test = await telegramService.testChannel(parsed.telegramChannelId);
+  const test = await telegramService.testChannel(parsed.destinationId);
   if (!test.ok) {
     return NextResponse.json(
       { error: "CHANNEL_ACCESS_FAILED", detail: test.error ?? "Could not access channel" },
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
     data: {
       telegramAccountId: acc.id,
       name: parsed.name,
-      telegramChannelId: parsed.telegramChannelId,
+      telegramChannelId: parsed.destinationId,
       purpose: parsed.purpose ?? null,
       status: "active",
       lastTestedAt: new Date(),
