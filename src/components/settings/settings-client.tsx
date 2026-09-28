@@ -41,7 +41,7 @@ const STEPS: { id: Exclude<Step, "idle">; label: string }[] = [
 
 export default function SettingsClient({ adminEmail, storageStatus, storageError, phoneReference, lastConnectedAt }: Props) {
   const { toast } = useToast();
-  const [step, setStep] = useState<Step>("phone");
+  const [step, setStep] = useState<Step>(storageStatus === "connected" ? "idle" : "phone");
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [phoneCodeHash, setPhoneCodeHash] = useState("");
@@ -154,7 +154,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
         </CardContent>
       </Card>
 
-      {/* Telegram connection */}
+      {/* Storage connection */}
       <Card className="animate-page-enter" style={{ "--enter-delay": "60ms" } as React.CSSProperties}>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -200,7 +200,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
                   <AlertDialogHeader>
                     <AlertDialogTitle>Disconnect storage?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      You will need to re-authenticate to upload again. Existing public URLs continue to work only if the Telegram session is restored before they are accessed.
+                      You will need to re-authenticate to upload again. Existing public URLs remain available when the storage service is restored.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -255,7 +255,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
                       className="font-mono tracking-[0.3em] text-center text-lg"
                       onKeyDown={(e) => e.key === "Enter" && code && verifyCode()}
                     />
-                    <p className="text-xs text-muted-foreground">Sent to {phone || "your Telegram app"}. Check your authentication method or SMS.</p>
+                    <p className="text-xs text-muted-foreground">Sent using your configured authentication method. Check your authentication method or SMS.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={verifyCode} disabled={busy || !code}>
