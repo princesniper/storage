@@ -1,6 +1,6 @@
 /**
  * GET /api/channels
- * POST /api/channels { name, telegramChannelId, purpose? }
+ * POST /api/channels { name, destinationId, purpose? }
  *
  * The client never sends arbitrary channel IDs — only via this admin-only endpoint.
  * Upload endpoint accepts only the internal DB channel FK.
