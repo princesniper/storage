@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,7 +17,22 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (sessionStatus === "authenticated" && session?.user) {
+      router.replace("/dashboard");
+    }
+  }, [sessionStatus, session, router]);
+
+  if (sessionStatus === "loading" || sessionStatus === "authenticated") {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" aria-label="Loading" />
+      </div>
+    );
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +54,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#09090b] p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
       {/* Emerald radial ambient backlight */}
       <div
         className="pointer-events-none absolute inset-0"
@@ -67,17 +83,17 @@ export default function LoginPage() {
               GrowPlants<span className="text-emerald-400"> Media</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
-              Private media infrastructure · Telegram-backed storage
+              Private media infrastructure
             </p>
           </div>
         </div>
 
         {/* Login card */}
         <div
-          className="animate-page-enter rounded-xl border border-white/[0.08] bg-[#111113] shadow-2xl shadow-black/40 overflow-hidden"
+          className="animate-page-enter rounded-xl border border-border bg-card shadow-2xl shadow-black/40 overflow-hidden"
           style={{ "--enter-delay": "80ms" } as React.CSSProperties}
         >
-          <div className="px-6 pt-6 pb-2 border-b border-white/[0.06]">
+          <div className="px-6 pt-6 pb-2 border-b border-border">
             <h2 className="text-base font-semibold">Sign in</h2>
             <p className="text-sm text-muted-foreground mt-0.5">Enter your admin credentials to continue.</p>
           </div>
@@ -96,7 +112,7 @@ export default function LoginPage() {
                   placeholder="admin@example.com"
                   required
                   autoFocus
-                  className="bg-white/[0.04] border-white/[0.08] focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-colors h-10"
+                  className="bg-muted/40 border-border focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-colors h-10"
                 />
               </div>
               <div className="space-y-1.5">
@@ -112,7 +128,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="pr-10 bg-white/[0.04] border-white/[0.08] focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-colors h-10"
+                    className="pr-10 bg-muted/40 border-border focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-colors h-10"
                   />
                   <Button
                     type="button"
@@ -151,7 +167,7 @@ export default function LoginPage() {
           className="text-xs text-center text-muted-foreground/60 animate-page-enter"
           style={{ "--enter-delay": "140ms" } as React.CSSProperties}
         >
-          Private admin access · Encrypted Telegram session
+          Private admin access · Encrypted storage session
         </p>
       </div>
     </div>

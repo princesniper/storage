@@ -53,7 +53,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({
         ok: false,
         latencyMs: result.latencyMs,
-        error: result.error ?? "CHANNEL_TEST_FAILED",
+        error: "CHANNEL_TEST_FAILED",
       }, { status: 502 });
     }
 
@@ -78,7 +78,7 @@ export async function POST(req: Request, ctx: RouteContext) {
     return NextResponse.json({
       ok: false,
       error: "CHANNEL_TEST_FAILED",
-      detail,
+      detail: "Unable to complete the storage destination test.",
     }, { status: 502 });
   }
 }

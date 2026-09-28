@@ -93,7 +93,14 @@ class TelegramServiceImpl {
    * serving returns 502) until the first upload/test triggers a boot.
    */
   async ensureStarted(): Promise<void> {
-    return this.ensureBooted();
+    await this.ensureBooted();
+    if (process.env.NODE_ENV === "production" && this.status !== "connected") {
+      const acc = await db.telegramAccount.findFirst({ orderBy: { updatedAt: "desc" } });
+      if (acc?.sessionCipher && acc.sessionIV && acc.sessionAuthTag) {
+        this.bootPromise = null;
+        await this.ensureBooted();
+      }
+    }
   }
 
   private async ensureBooted(): Promise<void> {

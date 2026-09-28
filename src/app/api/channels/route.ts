@@ -1,6 +1,6 @@
 /**
  * GET /api/channels
- * POST /api/channels { name, telegramChannelId, purpose? }
+ * POST /api/channels { name, destinationId, purpose? }
  *
  * The client never sends arbitrary channel IDs — only via this admin-only endpoint.
  * Upload endpoint accepts only the internal DB channel FK.
@@ -17,16 +17,19 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
+  await telegramService.ensureStarted();
+
   const channels = await db.storageChannel.findMany({
     orderBy: { createdAt: "asc" },
     include: { _count: { select: { files: true } } },
   });
 
   return NextResponse.json({
-    channels: channels.map((c) => ({
+    destinations: channels.map((c) => ({
       id: c.id,
       name: c.name,
       telegramChannelId: c.telegramChannelId,
+      destinationId: c.telegramChannelId,
       purpose: c.purpose,
       status: c.status,
       lastTestedAt: c.lastTestedAt,
@@ -34,15 +37,16 @@ export async function GET() {
       lastTestError: c.lastTestError,
       _count: { files: c._count.files },
     })),
+    storageStatus: telegramService.getStatus(),
     telegramStatus: telegramService.getStatus(),
   });
 }
 
 const postBody = z.object({
   name: z.string().min(1).max(100),
-  telegramChannelId: z
+  destinationId: z
     .string()
-    .regex(/^-100\d{8,}$/, "Must be a valid Telegram channel ID (e.g. -1001234567890)"),
+    .regex(/^-100\d{8,}$/, "Invalid storage destination identifier"),
   purpose: z.string().max(500).optional(),
 });
 
@@ -59,24 +63,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_REQUEST", detail: msg }, { status: 400 });
   }
 
-  // Telegram must be connected
+  await telegramService.ensureStarted();
   if (telegramService.getStatus() !== "connected") {
-    return NextResponse.json({ error: "TELEGRAM_NOT_CONNECTED" }, { status: 400 });
+    return NextResponse.json({ error: "STORAGE_NOT_CONNECTED" }, { status: 400 });
   }
 
   // Uniqueness check
   const dup = await db.storageChannel.findFirst({
-    where: { telegramChannelId: parsed.telegramChannelId },
+    where: { telegramChannelId: parsed.destinationId },
   });
   if (dup) {
     return NextResponse.json({ error: "CHANNEL_ALREADY_REGISTERED" }, { status: 409 });
   }
 
   // Verify access to the channel
-  const test = await telegramService.testChannel(parsed.telegramChannelId);
+  const test = await telegramService.testChannel(parsed.destinationId);
   if (!test.ok) {
     return NextResponse.json(
-      { error: "CHANNEL_ACCESS_FAILED", detail: test.error ?? "Could not access channel" },
+      { error: "CHANNEL_ACCESS_FAILED", detail: "Unable to access the storage destination." },
       { status: 400 }
     );
   }
@@ -84,14 +88,14 @@ export async function POST(req: Request) {
   // Find the TelegramAccount row (V1: single account)
   const acc = await db.telegramAccount.findFirst({ orderBy: { updatedAt: "desc" } });
   if (!acc) {
-    return NextResponse.json({ error: "NO_TELEGRAM_ACCOUNT" }, { status: 400 });
+    return NextResponse.json({ error: "NO_STORAGE_ACCOUNT" }, { status: 400 });
   }
 
   const channel = await db.storageChannel.create({
     data: {
       telegramAccountId: acc.id,
       name: parsed.name,
-      telegramChannelId: parsed.telegramChannelId,
+      telegramChannelId: parsed.destinationId,
       purpose: parsed.purpose ?? null,
       status: "active",
       lastTestedAt: new Date(),

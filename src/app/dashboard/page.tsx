@@ -113,7 +113,7 @@ export default async function DashboardPage() {
     issues.push({
       icon: WifiOff,
       title: "Storage disconnected",
-      detail: storageError ?? `Session state: ${storageStatus.replace("_", " ")}. Uploads and media serving are degraded.`,
+      detail: "Storage is unavailable. Uploads and media serving may be degraded.",
       href: "/settings",
       action: "Open settings",
     });
@@ -403,7 +403,7 @@ export default async function DashboardPage() {
                 <EmptyState
                   icon={ImageIcon}
                   title="No files uploaded yet"
-                  description="Upload your first image or video to a storage destination."
+                  description="Upload your first image or video to storage."
                   action={
                     <Button size="sm" asChild>
                       <a href="/upload">

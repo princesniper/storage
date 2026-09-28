@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 interface ChannelRow {
   id: number;
   name: string;
-  telegramChannelId: string;
+  destinationId: string;
   purpose: string | null;
   status: string;
   lastTestedAt: string | null;
@@ -60,13 +60,13 @@ export default function ChannelsClient() {
     onSuccess: (data) => {
       toast({
         title: data.ok ? "Connection OK" : "Connection failed",
-        description: data.ok ? `Latency ${data.latencyMs}ms` : data.error,
+        description: data.ok ? `Latency ${data.latencyMs}ms` : "Unable to access this storage destination.",
         variant: data.ok ? "default" : "destructive",
       });
       qc.invalidateQueries({ queryKey: ["destinations"] });
     },
     onError: (e: Error) => {
-      toast({ title: "Connection test failed", description: e.message, variant: "destructive" });
+      toast({ title: "Connection test failed", description: "Unable to complete the storage operation. Please try again.", variant: "destructive" });
     },
   });
 
@@ -236,12 +236,12 @@ function ChannelCard({
         <dl className="text-xs space-y-2">
           {/* Destination ID with copy button */}
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground shrink-0">Destination ID</dt>
+            <dt className="text-muted-foreground shrink-0">Storage ID</dt>
             <dd className="flex items-center gap-1.5 min-w-0">
               <code className="font-mono bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded text-[11px] truncate max-w-[140px]">
-                {c.telegramChannelId}
+                {c.destinationId}
               </code>
-              <CopyButton text={c.telegramChannelId} iconOnly label="Copy destination ID" size="icon" className="size-6 shrink-0" />
+              <CopyButton text={c.destinationId} iconOnly label="Copy destination ID" size="icon" className="size-6 shrink-0" />
             </dd>
           </div>
 
@@ -322,7 +322,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
   // on every open — fields always reflect the current add/edit target.
   // (The previous useState-initializer-as-effect pattern kept stale values.)
   const [name, setName] = useState(editing?.name ?? "");
-  const [destinationId, setChannelId] = useState(editing?.telegramChannelId ?? "");
+  const [destinationId, setChannelId] = useState(editing?.destinationId ?? "");
   const [purpose, setPurpose] = useState(editing?.purpose ?? "");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -339,7 +339,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
       const method = editing ? "PATCH" : "POST";
       const body = editing
         ? { name, purpose }
-        : { name, telegramChannelId: destinationId, purpose };
+        : { name, destinationId, purpose };
       const r = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -364,7 +364,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
         <DialogHeader>
           <DialogTitle>{editing ? "Edit Channel" : "Add Storage Destination"}</DialogTitle>
           <DialogDescription>
-            Register an existing private storage destination,
+            Register an existing storage destination,
             then paste its destination ID (enter the destination identifier provided by your storage setup).
           </DialogDescription>
         </DialogHeader>
@@ -377,7 +377,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
             <Label htmlFor="ch-id">Storage Destination ID</Label>
             <Input
               id="ch-id"
-              placeholder="-1001234567890"
+              placeholder="Enter storage destination ID"
               value={destinationId}
               onChange={(e) => setChannelId(e.target.value)}
               disabled={!!editing}

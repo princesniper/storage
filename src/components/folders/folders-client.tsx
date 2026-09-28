@@ -389,7 +389,7 @@ export default function FoldersClient() {
     const queue = items.filter((i) => retryOnly ? i.status === "failed" : i.status !== "success");
     if (!queue.length) return;
     if (!channelId) {
-      toast({ title: "Select a Telegram channel first", description: "Choose an active storage channel.", variant: "destructive" });
+      toast({ title: "Select a storage destination first", description: "Choose an active storage channel.", variant: "destructive" });
       return;
     }
     abortRef.current = false;
@@ -436,7 +436,7 @@ export default function FoldersClient() {
           <div className="flex max-w-xl flex-col gap-2">
             <label className="text-sm font-medium">Storage Destination</label>
             <select value={channelId} onChange={(e) => setChannelId(e.target.value)} disabled={uploading} className="h-10 rounded-md border bg-background px-3 text-sm">
-              <option value="">Select Telegram channel…</option>
+              <option value="">Select storage destination…</option>
               {channels.map((channel) => <option key={channel.id} value={String(channel.id)}>{channel.name}</option>)}
             </select>
           </div>
@@ -462,7 +462,7 @@ export default function FoldersClient() {
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>Transfer speed: {stats.speedBps > 0 ? formatBytes(stats.speedBps) + "/s" : "—"}</span>
                 <span>ETA: {stats.etaSeconds !== null ? Math.floor(stats.etaSeconds / 60) + "m " + (stats.etaSeconds % 60) + "s" : "Calculating…"}</span>
-                <span>{currentItem ? (currentItem.stage === "browser" ? "Browser → server" : currentItem.stage === "telegram" ? "Server → Telegram" : "Finalizing upload") : "—"}</span>
+                <span>{currentItem ? (currentItem.stage === "browser" ? "Browser → server" : currentItem.stage === "telegram" ? "Server → storage" : "Finalizing upload") : "—"}</span>
               </div>
               {currentItem && (
                 <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
@@ -490,7 +490,7 @@ export default function FoldersClient() {
                 </div>
               )}
               {!uploading && stats.uploaded < stats.total && failedItems.length === 0 && <Button onClick={() => runQueue(false)}><UploadCloud className="mr-2 h-4 w-4" />Start Upload</Button>}
-              {uploading && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{currentItem && currentItem.loadedBytes >= currentItem.file.size ? "Transfer complete — uploading to Telegram…" : `Transferring to server with ${CONCURRENCY} concurrent worker${CONCURRENCY === 1 ? "" : "s"}…`}</div>}
+              {uploading && <div className="text-sm text-muted-foreground flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />{currentItem && currentItem.loadedBytes >= currentItem.file.size ? "Transfer complete — uploading to storage…" : `Transferring to server with ${CONCURRENCY} concurrent worker${CONCURRENCY === 1 ? "" : "s"}…`}</div>}
               {!uploading && <Button variant="outline" onClick={clearUpload}>Clear</Button>}
             </div>
           )}
