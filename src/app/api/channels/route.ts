@@ -17,6 +17,8 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
+  await telegramService.ensureStarted();
+
   const channels = await db.storageChannel.findMany({
     orderBy: { createdAt: "asc" },
     include: { _count: { select: { files: true } } },
