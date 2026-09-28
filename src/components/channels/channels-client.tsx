@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 interface ChannelRow {
   id: number;
   name: string;
-  telegramChannelId: string;
+  storageDestinationId: string;
   purpose: string | null;
   status: string;
   lastTestedAt: string | null;
@@ -41,11 +41,11 @@ export default function ChannelsClient() {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ChannelRow | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery<{ channels: ChannelRow[]; telegramStatus: string }>({
-    queryKey: ["channels"],
+  const { data, isLoading, isError, refetch } = useQuery<{ destinations: ChannelRow[]; storageStatus: string }>({
+    queryKey: ["destinations"],
     queryFn: async () => {
       const r = await fetch("/api/channels");
-      if (!r.ok) throw new Error("Failed to load channels");
+      if (!r.ok) throw new Error("Failed to load destinations");
       return r.json();
     },
   });
@@ -63,7 +63,7 @@ export default function ChannelsClient() {
         description: data.ok ? `Latency ${data.latencyMs}ms` : data.error,
         variant: data.ok ? "default" : "destructive",
       });
-      qc.invalidateQueries({ queryKey: ["channels"] });
+      qc.invalidateQueries({ queryKey: ["destinations"] });
     },
     onError: (e: Error) => {
       toast({ title: "Connection test failed", description: e.message, variant: "destructive" });
@@ -83,10 +83,10 @@ export default function ChannelsClient() {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["channels"] });
+      qc.invalidateQueries({ queryKey: ["destinations"] });
       toast({ title: "Channel updated" });
     },
-    onError: (e: Error) => toast({ title: "Couldn't save channel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't save destination", description: e.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -98,34 +98,34 @@ export default function ChannelsClient() {
       }
     },
     onSuccess: () => {
-      toast({ title: "Channel registration removed", description: "Telegram content was NOT touched." });
-      qc.invalidateQueries({ queryKey: ["channels"] });
+      toast({ title: "Channel registration removed", description: "Stored content was not touched." });
+      qc.invalidateQueries({ queryKey: ["destinations"] });
     },
-    onError: (e: Error) => toast({ title: "Couldn't remove channel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't remove destination", description: e.message, variant: "destructive" }),
   });
 
-  const telegramConnected = data?.telegramStatus === "connected";
+  const storageConnected = data?.storageStatus === "connected";
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Storage Channels"
-        description="Telegram channels used as zero-cost storage nodes."
+        title="Storage Destinations"
+        description="Configured storage destinations used by the application."
         actions={
-          <Button size="sm" onClick={() => { setShowAdd(true); setEditing(null); }} disabled={!telegramConnected}>
+          <Button size="sm" onClick={() => { setShowAdd(true); setEditing(null); }} disabled={!storageConnected}>
             <Plus className="size-3.5 mr-1" aria-hidden /> Add Channel
           </Button>
         }
       />
 
-      {!telegramConnected && !isLoading && (
+      {!storageConnected && !isLoading && (
         <Alert className="border-amber-500/30 bg-amber-500/5">
           <AlertTriangle className="size-4" aria-hidden />
-          <AlertTitle>Telegram is not connected</AlertTitle>
+          <AlertTitle>Storage is not connected</AlertTitle>
           <AlertDescription>
-            Connect a Telegram account in{" "}
+            Connect your storage account in{" "}
             <a href="/settings" className="underline underline-offset-2 font-medium">Settings</a>{" "}
-            before adding channels.
+            before adding destinations.
           </AlertDescription>
         </Alert>
       )}
@@ -135,27 +135,27 @@ export default function ChannelsClient() {
       ) : isError ? (
         <EmptyState
           icon={AlertTriangle}
-          title="Couldn't load channels"
-          description="Something went wrong while fetching your storage channels."
+          title="Couldn't load destinations"
+          description="Something went wrong while fetching your storage destinations."
           action={<Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>}
         />
-      ) : !data?.channels || data.channels.length === 0 ? (
+      ) : !data?.destinations || data.destinations.length === 0 ? (
         <EmptyState
           icon={FolderTree}
-          title="No storage channels yet"
-          description="Register a private Telegram channel to start storing files. Create the channel in your Telegram app first."
+          title="No storage destinations yet"
+          description="Register a private storage destination to start storing files."
           action={
-            <Button size="sm" onClick={() => { setShowAdd(true); setEditing(null); }} disabled={!telegramConnected}>
-              <Plus className="size-3.5 mr-1" aria-hidden /> Add your first channel
+            <Button size="sm" onClick={() => { setShowAdd(true); setEditing(null); }} disabled={!storageConnected}>
+              <Plus className="size-3.5 mr-1" aria-hidden /> Add your first destination
             </Button>
           }
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {data.channels.map((c, i) => (
+          {data.destinations.map((c, i) => (
             <ChannelCard
               key={c.id}
-              channel={c}
+              destination={c}
               index={i}
               testing={testMutation.isPending}
               onTest={() => testMutation.mutate(c.id)}
@@ -177,7 +177,7 @@ export default function ChannelsClient() {
 }
 
 function ChannelCard({
-  channel: c,
+  destination: c,
   index,
   testing,
   onTest,
@@ -185,7 +185,7 @@ function ChannelCard({
   onToggle,
   onDelete,
 }: {
-  channel: ChannelRow;
+  destination: ChannelRow;
   index: number;
   testing: boolean;
   onTest: () => void;
@@ -227,21 +227,21 @@ function ChannelCard({
           <Switch
             checked={active}
             onCheckedChange={onToggle}
-            aria-label={`${active ? "Deactivate" : "Activate"} channel ${c.name}`}
+            aria-label={`${active ? "Deactivate" : "Activate"} destination ${c.name}`}
           />
         </div>
       </CardHeader>
 
       <CardContent className="space-y-3 pt-0">
         <dl className="text-xs space-y-2">
-          {/* Channel ID with copy button */}
+          {/* Destination ID with copy button */}
           <div className="flex items-center justify-between gap-2">
-            <dt className="text-muted-foreground shrink-0">Channel ID</dt>
+            <dt className="text-muted-foreground shrink-0">Destination ID</dt>
             <dd className="flex items-center gap-1.5 min-w-0">
               <code className="font-mono bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded text-[11px] truncate max-w-[140px]">
-                {c.telegramChannelId}
+                {c.storageDestinationId}
               </code>
-              <CopyButton text={c.telegramChannelId} iconOnly label="Copy channel ID" size="icon" className="size-6 shrink-0" />
+              <CopyButton text={c.storageDestinationId} iconOnly label="Copy destination ID" size="icon" className="size-6 shrink-0" />
             </dd>
           </div>
 
@@ -294,10 +294,10 @@ function ChannelCard({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Remove this channel registration?</AlertDialogTitle>
+                <AlertDialogTitle>Remove this destination registration?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This removes the channel from the storage dashboard only. Existing Telegram content and file mappings are not affected.
-                  Files already uploaded via this channel remain accessible via their public URLs.
+                  This removes the destination from the storage dashboard only. Existing Telegram content and file mappings are not affected.
+                  Files already uploaded via this destination remain accessible via their public URLs.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -322,15 +322,15 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
   // on every open — fields always reflect the current add/edit target.
   // (The previous useState-initializer-as-effect pattern kept stale values.)
   const [name, setName] = useState(editing?.name ?? "");
-  const [channelId, setChannelId] = useState(editing?.telegramChannelId ?? "");
+  const [destinationId, setChannelId] = useState(editing?.storageDestinationId ?? "");
   const [purpose, setPurpose] = useState(editing?.purpose ?? "");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const qc = useQueryClient();
 
   const submit = async () => {
-    if (!name || !channelId) {
-      toast({ title: "Name and Channel ID are required", variant: "destructive" });
+    if (!name || !destinationId) {
+      toast({ title: "Name and Destination ID are required", variant: "destructive" });
       return;
     }
     setSaving(true);
@@ -339,7 +339,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
       const method = editing ? "PATCH" : "POST";
       const body = editing
         ? { name, purpose }
-        : { name, telegramChannelId: channelId, purpose };
+        : { name, storageDestinationId: destinationId, purpose };
       const r = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
@@ -347,11 +347,11 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
       });
       const json = await r.json();
       if (!r.ok) {
-        toast({ title: editing ? "Couldn't save channel" : "Couldn't add channel", description: json.error ?? "Check the details and retry.", variant: "destructive" });
+        toast({ title: editing ? "Couldn't save destination" : "Couldn't add destination", description: json.error ?? "Check the details and retry.", variant: "destructive" });
         return;
       }
       toast({ title: editing ? "Channel updated" : "Channel added" });
-      qc.invalidateQueries({ queryKey: ["channels"] });
+      qc.invalidateQueries({ queryKey: ["destinations"] });
       onOpenChange(false);
     } finally {
       setSaving(false);
@@ -362,10 +362,10 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit Channel" : "Add Storage Channel"}</DialogTitle>
+          <DialogTitle>{editing ? "Edit Channel" : "Add Storage Destination"}</DialogTitle>
           <DialogDescription>
-            Register an existing private Telegram channel. Create it in your Telegram app first,
-            then paste its channel ID (looks like -1001234567890).
+            Register an existing private storage destination,
+            then paste its destination ID (enter the destination identifier provided by your storage setup).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -374,16 +374,16 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
             <Input id="ch-name" placeholder="🌿 GrowPlants Storage" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ch-id">Telegram Channel ID</Label>
+            <Label htmlFor="ch-id">Storage Destination ID</Label>
             <Input
               id="ch-id"
               placeholder="-1001234567890"
-              value={channelId}
+              value={destinationId}
               onChange={(e) => setChannelId(e.target.value)}
               disabled={!!editing}
               className="font-mono"
             />
-            {editing && <p className="text-xs text-muted-foreground">Channel ID cannot be changed after creation.</p>}
+            {editing && <p className="text-xs text-muted-foreground">Destination ID cannot be changed after creation.</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="ch-purpose">Purpose</Label>
