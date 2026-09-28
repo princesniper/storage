@@ -63,7 +63,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
       if (!r.ok) throw new Error(json.error ?? "Failed to send code");
       setPhoneCodeHash(json.phoneCodeHash);
       setStep("code");
-      toast({ title: "Code sent", description: "Check your authentication method or SMS." });
+      toast({ title: "Code sent", description: "Check your configured authentication method." });
     } catch (e) {
       toast({ title: "Failed", description: e instanceof Error ? e.message : "Unknown", variant: "destructive" });
     } finally {
@@ -135,7 +135,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
     <div className="space-y-6 max-w-3xl">
       <PageHeader
         title="Settings"
-        description="Account, Telegram connection and system information."
+        description="Account, storage connection and system information."
       />
 
       {/* Account */}
@@ -176,7 +176,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
               <StorageStatusBadge status={storageStatus} />
             </div>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {phoneReference && <span>Phone: <Badge variant="outline" className="font-mono">{phoneReference}</Badge></span>}
+              {phoneReference && <span>Reference: <Badge variant="outline" className="font-mono">{phoneReference}</Badge></span>}
               {lastConnectedAt && <span>Last connected: {formatDateTime(lastConnectedAt)}</span>}
             </div>
           </div>
@@ -221,10 +221,10 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
               {step === "phone" && (
                 <div className="space-y-3 animate-page-enter">
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Phone Number (international format)</Label>
+                    <Label htmlFor="phone">Storage account identifier</Label>
                     <Input
                       id="phone"
-                      placeholder="+91 98765 43210"
+                      placeholder="Storage account identifier"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       inputMode="tel"
@@ -279,7 +279,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
                       autoFocus
                       onKeyDown={(e) => e.key === "Enter" && password2fa && verify2fa()}
                     />
-                    <p className="text-xs text-muted-foreground">Your account has two-step verification enabled.</p>
+                    <p className="text-xs text-muted-foreground">Additional verification is required for this storage account.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button onClick={verify2fa} disabled={busy || !password2fa}>
@@ -295,7 +295,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
           {!connected && (
             <p className="text-xs text-muted-foreground">
               Tip: Get <code className="font-mono mx-1">api_id</code> and <code className="font-mono mx-1">api_hash</code> from{" "}
-              <a className="underline underline-offset-2" href="https://your provider" target="_blank" rel="noreferrer">your provider</a>{" "}
+              <a className="underline underline-offset-2" href="https://example.invalid" target="_blank" rel="noreferrer">your storage provider</a>{" "}
               and set them in the server <code className="font-mono">.env</code>.
             </p>
           )}
