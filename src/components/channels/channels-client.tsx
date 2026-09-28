@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 interface ChannelRow {
   id: number;
   name: string;
-  storageDestinationId: string;
+  telegramChannelId: string;
   purpose: string | null;
   status: string;
   lastTestedAt: string | null;
@@ -239,9 +239,9 @@ function ChannelCard({
             <dt className="text-muted-foreground shrink-0">Destination ID</dt>
             <dd className="flex items-center gap-1.5 min-w-0">
               <code className="font-mono bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded text-[11px] truncate max-w-[140px]">
-                {c.storageDestinationId}
+                {c.telegramChannelId}
               </code>
-              <CopyButton text={c.storageDestinationId} iconOnly label="Copy destination ID" size="icon" className="size-6 shrink-0" />
+              <CopyButton text={c.telegramChannelId} iconOnly label="Copy destination ID" size="icon" className="size-6 shrink-0" />
             </dd>
           </div>
 
@@ -296,7 +296,7 @@ function ChannelCard({
               <AlertDialogHeader>
                 <AlertDialogTitle>Remove this destination registration?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This removes the destination from the storage dashboard only. Existing Telegram content and file mappings are not affected.
+                  This removes the destination from the storage dashboard only. Existing stored content and file mappings are not affected.
                   Files already uploaded via this destination remain accessible via their public URLs.
                 </AlertDialogDescription>
               </AlertDialogHeader>
@@ -322,7 +322,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
   // on every open — fields always reflect the current add/edit target.
   // (The previous useState-initializer-as-effect pattern kept stale values.)
   const [name, setName] = useState(editing?.name ?? "");
-  const [destinationId, setChannelId] = useState(editing?.storageDestinationId ?? "");
+  const [destinationId, setChannelId] = useState(editing?.telegramChannelId ?? "");
   const [purpose, setPurpose] = useState(editing?.purpose ?? "");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -339,7 +339,7 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
       const method = editing ? "PATCH" : "POST";
       const body = editing
         ? { name, purpose }
-        : { name, storageDestinationId: destinationId, purpose };
+        : { name, telegramChannelId: destinationId, purpose };
       const r = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
