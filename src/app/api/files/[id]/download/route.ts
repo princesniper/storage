@@ -29,7 +29,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
   if (!result) return NextResponse.json({ error: "STORAGE_UNAVAILABLE" }, { status: 503 });
 
   const safeName = file.originalName.replace(/[\\/\u0000-\u001f]/g, "_").trim() || "download";
-  return new Response(result.bytes, {
+  const body = new ArrayBuffer(result.bytes.byteLength);\n  new Uint8Array(body).set(result.bytes);\n  return new Response(body, {
     headers: {
       "Content-Type": file.mimeType || "application/octet-stream",
       "Content-Length": String(result.bytes.length),
