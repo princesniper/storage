@@ -195,7 +195,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
 
         <div className="relative max-w-full max-h-full flex items-center justify-center" onClick={(event) => event.stopPropagation()}>
           {isVideo ? (
-            <video ref={videoRef} key={file.id} src={file.publicUrl} controls playsInline className="max-w-full max-h-[82vh] rounded-xl shadow-2xl border border-white/[0.06] bg-black" />
+            <video key={file.id} src={file.publicUrl} controls playsInline className="max-w-full max-h-[82vh] rounded-xl shadow-2xl border border-white/[0.06] bg-black" />
           ) : (
             <img
               ref={imageRef}
