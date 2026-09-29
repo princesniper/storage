@@ -18,8 +18,8 @@ function shareUrl(token: string): string {
   const appUrl = (process.env.APP_URL ?? "").trim();
   const isLocal = (value: string) => /^(https?:\/\/)?(localhost|127(?:\.\d{1,3}){3})(?::\d+)?$/i.test(value.replace(/\/+$/, ""));
   const origin =
-    (process.env.NODE_ENV === "production" && railwayDomain ? `https://${railwayDomain}` : "") ||
     configured ||
+    (process.env.NODE_ENV === "production" && railwayDomain && railwayDomain !== "m.media-growplants.com" ? `https://${railwayDomain}` : "") ||
     (process.env.NODE_ENV === "production" && isLocal(appUrl) ? "https://growplants-media.up.railway.app" : appUrl) ||
     "https://growplants-media.up.railway.app";
   const normalized = origin.replace(/\/+$/, "");
