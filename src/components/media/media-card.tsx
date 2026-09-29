@@ -72,9 +72,14 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
         {/* Thumbnail / image */}
         <span className="block size-full">
           {isVideo ? (
-            <span className="size-full flex items-center justify-center bg-white/[0.02]">
-              <Film className="size-8 text-muted-foreground/40" aria-hidden />
-            </span>
+            <video
+              src={file.publicUrl}
+              muted
+              playsInline
+              preload="auto"
+              className="size-full object-cover"
+              aria-label=""
+            />
           ) : (
             <img src={file.publicUrl} alt="" loading="lazy" className="size-full object-cover" />
           )}
