@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { getSharedFolderAccess } from "@/lib/folder-share";
 import { findSharedFile, getSharedFileBytes } from "@/lib/shared-media";
-import { createZipStream } from "@/lib/zip";
+import { createZipStream, type ZipEntry } from "@/lib/zip";
 import { NextResponse } from "next/server";
 
 interface RouteContext { params: Promise<{ token: string }> }
@@ -41,7 +41,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return parts.join("/");
   };
 
-  const entries = [];
+  const entries: ZipEntry[] = [];
   for (const folder of folders) {
     if (folder.id !== access.folderId) entries.push({ name: zipPath(access.folder.name, relativePath(folder.id)) + "/", directory: true });
   }

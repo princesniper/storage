@@ -54,7 +54,9 @@ export async function GET(req: Request, ctx: RouteContext) {
     }
 
     const body = range ? result.bytes.subarray(range.start, range.end + 1) : result.bytes;
-    return new Response(body, {
+    const responseBody = new Uint8Array(body.length);
+    responseBody.set(body);
+    return new Response(responseBody, {
       status: range ? 206 : 200,
       headers: {
         "Content-Type": file.mimeType,

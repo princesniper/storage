@@ -1,6 +1,4 @@
-import { ReadableStream } from "node:stream/web";
-
-type ZipEntry = {
+export type ZipEntry = {
   name: string;
   getBytes?: () => Promise<Buffer>;
   directory?: boolean;
@@ -89,19 +87,14 @@ export function createZipStream(entries: ZipEntry[]): ReadableStream<Uint8Array>
           const bytes = rawEntry.directory ? Buffer.alloc(0) : await rawEntry.getBytes!();
           const crc = crc32(bytes);
           const header = localHeader(nameBytes, crc, bytes.length, time, date);
-          controller.enqueue(header);
-          offset += header.length;
-          if (bytes.length) {
-            controller.enqueue(bytes);
-            offset += bytes.length;
-          }
+          const headerChunk = new Uint8Array(header.length); headerChunk.set(header); controller.enqueue(headerChunk); offset += header.length;
+          if (bytes.length) { const dataChunk = new Uint8Array(bytes.length); dataChunk.set(bytes); controller.enqueue(dataChunk); offset += bytes.length; }
           central.push({ name: nameBytes, crc32: crc, size: bytes.length, offset: offset - bytes.length - header.length, time, date });
         }
 
         const directoryOffset = offset;
         const directory = Buffer.concat(central.map(centralHeader));
-        controller.enqueue(directory);
-        controller.enqueue(endRecord(central.length, directory.length, directoryOffset));
+        const directoryChunk = new Uint8Array(directory.length); directoryChunk.set(directory); controller.enqueue(directoryChunk); const end = endRecord(central.length, directory.length, directoryOffset); const endChunk = new Uint8Array(end.length); endChunk.set(end); controller.enqueue(endChunk);
         controller.close();
       } catch (error) {
         controller.error(error);
