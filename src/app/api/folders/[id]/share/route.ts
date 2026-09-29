@@ -13,11 +13,15 @@ function parseId(value: string): number | null {
 }
 
 function shareUrl(token: string): string {
-  const origin = (process.env.APP_URL ?? "").trim().replace(/\/+$/, "");
-  if (!origin) throw new Error("APP_URL is required for folder sharing");
-  const parsed = new URL(origin);
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("APP_URL must use http(s)");
-  return `${origin}/shared/folders/${token}`;
+  const configured = (process.env.SHARE_PUBLIC_URL ?? "").trim();
+  const appUrl = (process.env.APP_URL ?? "").trim();
+  const isLocal = (value: string) => /^(https?:\/\/)?(localhost|127(?:\\.\\d{1,3}){3})(?::\\d+)?$/i.test(value.replace(/\/+$/, ""));
+  const origin = configured || (process.env.NODE_ENV === "production" && isLocal(appUrl) ? "https://growplants-media.up.railway.app" : appUrl) || "https://growplants-media.up.railway.app";
+  const normalized = origin.replace(/\/+$/, "");
+  const parsed = new URL(normalized);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("SHARE_PUBLIC_URL must use http(s)");
+  if (process.env.NODE_ENV === "production" && isLocal(normalized)) throw new Error("SHARE_PUBLIC_URL cannot be localhost in production");
+  return `${normalized}/shared/folders/${token}`;
 }
 
 export async function GET(_req: Request, ctx: RouteContext) {
