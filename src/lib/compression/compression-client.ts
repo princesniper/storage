@@ -50,8 +50,12 @@ class ImageWorkerClient {
 const imageWorker = new ImageWorkerClient();
 
 function fileFromBlob(blob: Blob, original: File): File {
-  return new File([blob], original.name, {
-    type: blob.type || original.type,
+  const type = blob.type || original.type;
+  const name = type === "video/webm"
+    ? original.name.replace(/\.[^.]+$/, ".webm")
+    : original.name;
+  return new File([blob], name, {
+    type,
     lastModified: original.lastModified,
   });
 }

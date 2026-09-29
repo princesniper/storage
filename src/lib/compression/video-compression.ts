@@ -1,7 +1,9 @@
 const VIDEO_MAX_DIMENSION = 1920;
-const VIDEO_BITRATE = 1_500_000;
-const AUDIO_BITRATE = 96_000;
+const VIDEO_BITRATE = 4_000_000;
+const AUDIO_BITRATE = 128_000;
 const TIMEOUT_MS = 10 * 60 * 1000;
+const OUTPUT_MIME = "video/webm";
+const OUTPUT_EXTENSION = "webm";
 
 function waitForEvent(target: EventTarget, event: string, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -25,7 +27,12 @@ export async function compressVideo(
   if (typeof MediaRecorder === "undefined") throw new Error("media-recorder-unavailable");
   const captureStream = (HTMLVideoElement.prototype as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream;
   if (!captureStream) throw new Error("capture-stream-unavailable");
-  if (!MediaRecorder.isTypeSupported(file.type)) throw new Error("source-mime-not-recordable");
+  const recorderMime = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    OUTPUT_MIME,
+  ].find((mime) => MediaRecorder.isTypeSupported(mime));
+  if (!recorderMime) throw new Error("webm-recorder-unavailable");
 
   const url = URL.createObjectURL(file);
   const video = document.createElement("video");
@@ -58,7 +65,7 @@ export async function compressVideo(
     for (const track of sourceStream.getAudioTracks()) outputStream.addTrack(track);
 
     const recorder = new MediaRecorder(output, {
-      mimeType: file.type,
+      mimeType: recorderMime,
       videoBitsPerSecond: VIDEO_BITRATE,
       audioBitsPerSecond: AUDIO_BITRATE,
     });
@@ -122,8 +129,30 @@ export async function compressVideo(
     if (recorderError) throw recorderError;
     onProgress?.(100);
 
-    const blob = new Blob(chunks, { type: file.type });
+    const blob = new Blob(chunks, { type: OUTPUT_MIME });
     if (blob.size <= 0) throw new Error("invalid-video-output");
+
+    const validationUrl = URL.createObjectURL(blob);
+    const validationVideo = document.createElement("video");
+    validationVideo.preload = "metadata";
+    validationVideo.src = validationUrl;
+    try {
+      await waitForEvent(validationVideo, "loadedmetadata", 15_000);
+      if (!Number.isFinite(validationVideo.duration) || validationVideo.duration < duration * 0.95) {
+        throw new Error("compressed-video-duration-mismatch");
+      }
+      const outputBitrate = (blob.size * 8) / validationVideo.duration;
+      if (!Number.isFinite(outputBitrate) || outputBitrate < 256_000) {
+        throw new Error("compressed-video-bitrate-too-low");
+      }
+      if (validationVideo.videoWidth < 2 || validationVideo.videoHeight < 2) {
+        throw new Error("compressed-video-invalid-dimensions");
+      }
+    } finally {
+      validationVideo.removeAttribute("src");
+      validationVideo.load();
+      URL.revokeObjectURL(validationUrl);
+    }
     source.getTracks().forEach((track) => track.stop());
     outputStream.getTracks().forEach((track) => track.stop());
     return blob;
