@@ -26,12 +26,11 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
   const currentIndex = file ? siblings.indexOf(file.id) : -1;
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < siblings.length - 1;
-  const [zoom, setZoom] = useState(1);\n  const [rotation, setRotation] = useState(0);\n  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const pointers = useRef(new Map<number, Point>());
   const pinchStart = useRef<{ distance: number; zoom: number } | null>(null);
@@ -40,6 +39,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
 
   const resetView = useCallback(() => {
     setZoom(1);
+    setRotation(0);
     setPan({ x: 0, y: 0 });
     pinchStart.current = null;
     dragStart.current = null;
@@ -56,6 +56,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
   useEffect(() => {
     if (!open) return;
     resetView();
+    setIsInspectorOpen(false);
   }, [file?.id, open, resetView]);
 
   useEffect(() => {
@@ -73,20 +74,15 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
       if (event.key === "Escape") onClose();
       else if (event.key === "ArrowLeft") goPrev();
       else if (event.key === "ArrowRight") goNext();
-      else if (event.key === "0") resetView();\n      else if (event.key === "r" || event.key === "R") setRotation((value) => (value + 90) % 360);
+      else if (event.key === "0") resetView();
+      else if (event.key === "r" || event.key === "R") setRotation((value) => (value + 90) % 360);
+      else if (event.key === "r" || event.key === "R") setRotation((value) => (value + 90) % 360);
       else if (event.key === "+" || event.key === "=") setZoom((value) => Math.min(MAX_ZOOM, value + 0.25));
       else if (event.key === "-") setZoom((value) => Math.max(MIN_ZOOM, value - 0.25));
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose, goPrev, goNext, resetView]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onFullscreen = () => setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", onFullscreen);
-    return () => document.removeEventListener("fullscreenchange", onFullscreen);
-  }, [open]);
 
   useEffect(() => {
     if (!open) {
@@ -145,24 +141,6 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
         if (end.x > start.x) goPrev();
         else goNext();
       }
-    }
-  };
-
-  const zoomBy = (delta: number) => {
-    setZoom((value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value + delta)));
-    if (zoom + delta <= MIN_ZOOM) setPan({ x: 0, y: 0 });
-  };
-
-  const copyUrl = async () => {
-    try { await navigator.clipboard.writeText(file?.publicUrl ?? ""); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch {}
-  };
-
-  const toggleFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await viewportRef.current?.requestFullscreen();
-    } catch {
-      // Fullscreen is optional and browser-controlled.
     }
   };
 
@@ -229,7 +207,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
               onPointerUp={finishPointer}
               onPointerCancel={finishPointer}
               onDoubleClick={() => { if (zoom > 1) resetView(); else setZoom(2); }}
-              onWheel={(event) => { event.preventDefault(); zoomBy(event.deltaY < 0 ? 0.2 : -0.2); }}
+              onWheel={(event) => { event.preventDefault(); setZoom((value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value + (event.deltaY < 0 ? 0.2 : -0.2)))); }}
               className="max-w-full max-h-[82vh] rounded-xl shadow-2xl border border-white/[0.06] object-contain select-none touch-none"
               style={{ transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: "center", cursor: zoom > 1 ? "grab" : "zoom-in", transition: pointers.current.size ? "none" : "transform 120ms ease-out" }}
             />
