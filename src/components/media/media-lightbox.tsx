@@ -28,7 +28,8 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
   const hasNext = currentIndex >= 0 && currentIndex < siblings.length - 1;
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
-  const [isFullscreen, setIsFullscreen] = useState(false);\n  const [copied, setCopied] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
