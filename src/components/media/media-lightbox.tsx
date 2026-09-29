@@ -70,7 +70,7 @@ export function MediaLightbox({
     setIsInspectorOpen(false);
     setImageError(false);
     setIsImageLoading(Boolean(file && !isVideoMime(file.mimeType)));
-  }, [file?.id, open, resetView, file]);
+  }, [file?.id, file?.mimeType, open, resetView]);
 
   useEffect(() => {
     if (!open) return;
