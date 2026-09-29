@@ -209,9 +209,21 @@ export default function FolderBrowser() {
 
   const revokeShareLink = async (folder: FolderRow) => {
     if (folderActionId !== null) return;
-    const active = shareStatus[folder.id];
-    if (!active) { await loadShareStatus(folder.id); }
-    if (!active && !shareStatus[folder.id]) return;
+    let active = shareStatus[folder.id];
+    if (active === undefined) {
+      try {
+        const statusResponse = await fetch(`/api/folders/${folder.id}/share`, { cache: "no-store" });
+        if (statusResponse.ok) {
+          const statusJson = await statusResponse.json();
+          active = Boolean(statusJson.active);
+          setShareStatus((prev) => ({ ...prev, [folder.id]: active }));
+        }
+      } catch {}
+    }
+    if (!active) {
+      window.alert("This folder does not have an active share link.");
+      return;
+    }
     if (!window.confirm(`Revoke the current share link for "${folder.name}"? Existing files and the folder will remain intact.`)) return;
     setFolderActionId(folder.id);
     try {
