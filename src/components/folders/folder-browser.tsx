@@ -84,6 +84,17 @@ export default function FolderBrowser() {
   const [openFile, setOpenFile] = useState<FileRow | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
+  const [shareRevoking, setShareRevoking] = useState(false);
+
+  const shareQuery = useQuery<{ active: boolean }>({
+    queryKey: ["folder-share", folderId],
+    enabled: folderId !== null,
+    queryFn: async () => {
+      const response = await fetch(`/api/folders/${folderId}/share`);
+      if (!response.ok) throw new Error("Failed to load share status");
+      return response.json();
+    },
+  });
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   const foldersQuery = useQuery<FolderRow[]>({
@@ -142,11 +153,29 @@ export default function FolderBrowser() {
       if (!response.ok) throw new Error(json.detail || json.error || "Failed to generate share link");
       await navigator.clipboard.writeText(json.url);
       setShareCopied(true);
+      await shareQuery.refetch();
       window.setTimeout(() => setShareCopied(false), 2500);
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Failed to generate share link");
     } finally {
       setShareBusy(false);
+    }
+  };
+
+  const revokeShareLink = async () => {
+    if (!current || shareRevoking) return;
+    if (!window.confirm("Revoke the current share link? Existing files and the folder will remain intact.")) return;
+    setShareRevoking(true);
+    try {
+      const response = await fetch(`/api/folders/${current.id}/share`, { method: "DELETE" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json.detail || json.error || "Failed to revoke share link");
+      await shareQuery.refetch();
+      setShareCopied(false);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Failed to revoke share link");
+    } finally {
+      setShareRevoking(false);
     }
   };
 
@@ -187,7 +216,8 @@ export default function FolderBrowser() {
         <div className="flex flex-wrap gap-2">
           {current && <Button variant="outline" onClick={() => router.push(`/upload?folderId=${current.id}`)}><Folder className="mr-2 h-4 w-4" />Upload Files</Button>}
           <Button variant="outline" onClick={() => router.push("/folders?upload=1")}><FolderOpen className="mr-2 h-4 w-4" />Upload Folder</Button>
-          {current && <Button variant="outline" onClick={generateShareLink} disabled={shareBusy}><Link2 className="mr-2 h-4 w-4" />{shareBusy ? "Generating…" : shareCopied ? "Link Copied" : "Copy Share Link"}</Button>}
+          {current && <Button variant="outline" onClick={generateShareLink} disabled={shareBusy}><Link2 className="mr-2 h-4 w-4" />{shareBusy ? "Generating…" : shareCopied ? "Link Copied" : shareQuery.data?.active ? "Generate New Link" : "Create Share Link"}</Button>}
+          {current && shareQuery.data?.active && <Button variant="outline" onClick={revokeShareLink} disabled={shareRevoking}><Trash2 className="mr-2 h-4 w-4" />{shareRevoking ? "Revoking…" : "Revoke Share"}</Button>}
           {current && <Button variant="destructive" onClick={deleteCurrentFolder} disabled={deleteBusy}><Trash2 className="mr-2 h-4 w-4" />{deleteBusy ? "Deleting…" : "Delete Folder"}</Button>}
         </div>
       </div>

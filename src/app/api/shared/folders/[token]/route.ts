@@ -1,43 +1,26 @@
-import { db } from "@/lib/db";
-import { parseFolderShareToken } from "@/lib/folder-share";
 import { canonicalUrl } from "@/lib/media-url";
+import { getSharedFolderAccess } from "@/lib/folder-share";
+import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 interface RouteContext { params: Promise<{ token: string }> }
 
 export async function GET(_req: Request, ctx: RouteContext) {
   const token = (await ctx.params).token;
-  const folderId = parseFolderShareToken(token);
-  if (!folderId) return NextResponse.json({ error: "INVALID_SHARE_LINK" }, { status: 404 });
-
-  const folders = await db.folder.findMany({ select: { id: true, name: true, parentId: true } });
-  const root = folders.find((folder) => folder.id === folderId);
-  if (!root) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
-
-  const ids = new Set<number>([folderId]);
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const folder of folders) {
-      if (folder.parentId !== null && ids.has(folder.parentId) && !ids.has(folder.id)) {
-        ids.add(folder.id);
-        changed = true;
-      }
-    }
-  }
-
+  const access = await getSharedFolderAccess(token);
+  if (!access) return NextResponse.json({ error: "INVALID_SHARE_LINK" }, { status: 404 });
   const files = await db.file.findMany({
-    where: { folderId: { in: [...ids] }, status: "active" },
-    select: { id: true, originalName: true, mimeType: true, size: true, sequenceNumber: true, publicUrl: true, createdAt: true, folderId: true },
+    where: { folderId: { in: [...access.folderIds] }, status: "active" },
+    select: { id: true, originalName: true, mimeType: true, size: true, sequenceNumber: true, createdAt: true, folderId: true },
     orderBy: { createdAt: "asc" },
   });
-
+  const folders = await db.folder.findMany({ select: { id: true, name: true, parentId: true } });
   const byId = new Map(folders.map((folder) => [folder.id, folder]));
   const relativePath = (id: number | null) => {
     const parts: string[] = [];
     let current = id;
     const seen = new Set<number>();
-    while (current !== null && current !== folderId && !seen.has(current)) {
+    while (current !== null && current !== access.folderId && !seen.has(current)) {
       seen.add(current);
       const folder = byId.get(current);
       if (!folder) break;
@@ -46,17 +29,18 @@ export async function GET(_req: Request, ctx: RouteContext) {
     }
     return parts.join("/");
   };
-
   return NextResponse.json({
-    folder: { id: root.id, name: root.name },
+    folder: { id: access.folder.id, name: access.folder.name },
     files: files.map((file) => ({
       id: file.id,
       name: file.originalName,
       path: relativePath(file.folderId),
       mimeType: file.mimeType,
       size: Number(file.size),
-      url: file.sequenceNumber != null ? canonicalUrl(file.sequenceNumber, file.mimeType) : file.publicUrl,
+      url: `/api/shared/folders/${encodeURIComponent(token)}/files/${file.id}`,
+      downloadUrl: `/api/shared/folders/${encodeURIComponent(token)}/files/${file.id}?download=1`,
+      canonicalMediaUrl: file.sequenceNumber != null ? canonicalUrl(file.sequenceNumber, file.mimeType) : null,
       createdAt: file.createdAt,
     })),
-  }, { headers: { "Cache-Control": "private, max-age=30" } });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }
