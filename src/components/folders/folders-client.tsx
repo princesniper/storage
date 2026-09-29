@@ -194,6 +194,7 @@ export default function FoldersClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const uploadMode = searchParams.get("upload") === "1";
+  const parentFolderId = Number(searchParams.get("parentFolderId")) || null;
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
   const currentItem = useMemo(() => items.find((i) => i.status === "uploading") ?? null, [items]);
@@ -275,7 +276,7 @@ export default function FoldersClient() {
     const response = await fetch("/api/folders/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rootName, folderPaths: [...paths] }),
+      body: JSON.stringify({ rootName, folderPaths: [...paths], parentFolderId }),
     });
     const json = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(json.error || "Folder tree creation failed");
