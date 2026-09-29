@@ -1,4 +1,3 @@
-import { canonicalUrl } from "@/lib/media-url";
 import { getSharedFolderAccess } from "@/lib/folder-share";
 import { db } from "@/lib/db";
 import { NextResponse } from "next/server";
@@ -39,7 +38,6 @@ export async function GET(_req: Request, ctx: RouteContext) {
       size: Number(file.size),
       url: `/api/shared/folders/${encodeURIComponent(token)}/files/${file.id}`,
       downloadUrl: `/api/shared/folders/${encodeURIComponent(token)}/files/${file.id}?download=1`,
-      canonicalMediaUrl: file.sequenceNumber != null ? canonicalUrl(file.sequenceNumber, file.mimeType) : null,
       createdAt: file.createdAt,
     })),
   }, { headers: { "Cache-Control": "private, no-store" } });
