@@ -93,14 +93,11 @@ class TelegramServiceImpl {
    * serving returns 502) until the first upload/test triggers a boot.
    */
   async ensureStarted(): Promise<void> {
+    // A single boot promise must own session initialization. Retrying by
+    // clearing bootPromise here can create a second TelegramClient with the
+    // same session while the first one is still alive, which produces
+    // AUTH_KEY_DUPLICATED and turns media reads into 502s.
     await this.ensureBooted();
-    if (process.env.NODE_ENV === "production" && this.status !== "connected") {
-      const acc = await db.telegramAccount.findFirst({ orderBy: { updatedAt: "desc" } });
-      if (acc?.sessionCipher && acc.sessionIV && acc.sessionAuthTag) {
-        this.bootPromise = null;
-        await this.ensureBooted();
-      }
-    }
   }
 
   private async ensureBooted(): Promise<void> {
