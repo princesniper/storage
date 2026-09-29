@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "proxy:dev": "caddy run --config Caddyfile.dev",
-    "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "build": "next build && node scripts/copy-standalone-assets.mjs",
     "start": "NODE_ENV=production node .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
     "db:push": "prisma db push --accept-data-loss",
