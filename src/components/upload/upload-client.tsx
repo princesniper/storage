@@ -15,6 +15,8 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { formatBytes, isVideoMime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
+import type { CompressionMode, CompressionState } from "@/lib/compression/types";
 
 interface ChannelRow { id: number; name: string; status: string; }
 interface ChannelList { destinations: ChannelRow[]; storageStatus?: string; }
@@ -24,8 +26,10 @@ interface ChannelList { destinations: ChannelRow[]; storageStatus?: string; }
 const CONCURRENCY = 3;
 const MAX_RETRIES_ON_429 = 3;
 const RETRY_WAIT_S = 5;
+const COMPRESSION_CONCURRENCY = 2;
 
-type ItemStatus = "pending" | "uploading" | "success" | "failed";
+// Upload concurrency remains unchanged. Compression is a separate local preprocessing stage.
+type ItemStatus = "pending" | "compressing" | "uploading" | "success" | "failed";
 
 interface BatchItem {
   key: number;
@@ -33,6 +37,12 @@ interface BatchItem {
   preview?: string; // object URL for image thumbnails
   progress: number;
   status: ItemStatus;
+  compressionState?: CompressionState;
+  compressionProgress?: number;
+  compressionDetail?: string;
+  compressed?: boolean;
+  originalSize?: number;
+  outputSize?: number;
   url?: string;
   channelName?: string;
   error?: string;
@@ -41,6 +51,28 @@ interface BatchItem {
 }
 
 let keyCounter = 0;
+
+function createLimiter(concurrency: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+
+  const pump = () => {
+    while (active < concurrency && queue.length > 0) {
+      active += 1;
+      queue.shift()?.();
+    }
+  };
+
+  return <T,>(task: () => Promise<T>) => new Promise<T>((resolve, reject) => {
+    queue.push(() => {
+      task().then(resolve, reject).finally(() => {
+        active -= 1;
+        pump();
+      });
+    });
+    pump();
+  });
+}
 
 /**
  * Phase D — calm, honest upload error copy (presentation only).
@@ -67,6 +99,7 @@ export default function UploadClient() {
   const targetFolderId = Number(searchParams.get("folderId")) || null;
   const { toast } = useToast();
   const [channelId, setChannelId] = useState<string>("");
+  const [compressionMode, setCompressionMode] = useState<CompressionMode>("auto");
   const [items, setItems] = useState<BatchItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -110,6 +143,7 @@ export default function UploadClient() {
       for (const i of snapshot.current) {
         if (i.preview) URL.revokeObjectURL(i.preview);
       }
+      disposeCompressionResources();
     };
   }, []);
 
@@ -228,21 +262,65 @@ export default function UploadClient() {
     abortRef.current = false;
     setUploading(true);
     setBatchError(null);
-    // Reset failed items to pending for re-run
-    setItems((prev) => prev.map((i) => (i.status === "failed" ? { ...i, status: "pending" as ItemStatus, progress: 0, error: undefined } : i)));
+    setItems((prev) => prev.map((i) => (
+      i.status === "failed"
+        ? { ...i, status: "pending" as ItemStatus, progress: 0, error: undefined, compressionState: undefined, compressionProgress: undefined, compressionDetail: undefined }
+        : i
+    )));
 
-    // Snapshot keys; queue with concurrency 3
     const snapshot = items.filter((i) => i.status !== "success");
-    const queue = [...snapshot];
-    const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-      while (queue.length > 0 && !abortRef.current) {
-        const next = queue.shift();
-        if (!next) break;
-        // Skip already-successful (re-run case handled by snapshot filter)
-        await uploadOne(next, channelId);
-      }
-    });
-    await Promise.all(workers);
+    const upload = createLimiter(CONCURRENCY);
+    const compression = createLimiter(COMPRESSION_CONCURRENCY);
+    const videoCompression = createLimiter(1);
+    const uploadPromises: Promise<void>[] = [];
+
+    await Promise.all(snapshot.map((item) => compression(async () => {
+      if (abortRef.current) return;
+
+      patchItem(item.key, {
+        status: "compressing",
+        compressionState: "analyzing",
+        compressionProgress: 0,
+        compressionDetail: "Preparing local compression",
+        error: undefined,
+      });
+
+      const compressTask = () => compressFile(item.file, compressionMode, (state) => {
+        if (abortRef.current) return;
+        patchItem(item.key, {
+          status: "compressing",
+          compressionState: state.state,
+          compressionProgress: state.progress ?? 0,
+          compressionDetail: state.detail,
+        });
+      });
+
+      const result = item.file.type.startsWith("video/")
+        ? await videoCompression(compressTask)
+        : await compressTask();
+
+      if (abortRef.current) return;
+
+      patchItem(item.key, {
+        file: result.file,
+        compressed: result.compressed,
+        originalSize: result.originalSize,
+        outputSize: result.outputSize,
+        compressionState: result.compressed ? "ready" : "fallback",
+        compressionProgress: 100,
+        compressionDetail: result.compressed
+          ? "Compressed locally"
+          : (result.fallbackReason === "over-800mb" ? "Large file — uploading original" : "Uploading original"),
+      });
+
+      uploadPromises.push(upload(() => uploadOne({
+        ...item,
+        file: result.file,
+        status: "pending",
+      }, channelId)));
+    })));
+
+    await Promise.all(uploadPromises);
     setUploading(false);
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -316,6 +394,23 @@ export default function UploadClient() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="compression-mode">Compression</Label>
+          <Select value={compressionMode} onValueChange={(value) => setCompressionMode(value as CompressionMode)} disabled={uploading}>
+            <SelectTrigger id="compression-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="original">Original</SelectItem>
+              <SelectItem value="balanced">Balanced</SelectItem>
+              <SelectItem value="auto">Auto</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Compression runs locally in your browser. Files over 800 MB upload as original.
+          </p>
         </div>
 
         {/* ─── Drop zone ─── */}
@@ -414,11 +509,23 @@ export default function UploadClient() {
                   <div className="text-xs text-muted-foreground tabular-nums">
                     {formatBytes(item.file.size)} · {item.file.type || "unknown type"}
                   </div>
-                  {(item.status === "uploading" || (item.status === "pending" && uploading)) && (
+                  {item.status === "compressing" && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Progress value={item.compressionProgress ?? 0} className="flex-1" aria-label={`Compression progress for ${item.file.name}`} />
+                        <span className="text-[11px] text-muted-foreground tabular-nums w-9 text-right">{item.compressionProgress ?? 0}%</span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">{item.compressionDetail ?? "Processing locally…"}</div>
+                    </div>
+                  )}
+                  {item.status === "uploading" && (
                     <div className="flex items-center gap-2 mt-2">
                       <Progress value={item.progress} className="flex-1" aria-label={`Upload progress for ${item.file.name}`} />
                       <span className="text-[11px] text-muted-foreground tabular-nums w-9 text-right">{item.progress}%</span>
                     </div>
+                  )}
+                  {item.status === "pending" && uploading && (
+                    <div className="text-[11px] text-muted-foreground mt-2">Waiting for compression…</div>
                   )}
                   {item.retryNote && (
                     <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">{item.retryNote}</div>
@@ -562,7 +669,7 @@ export default function UploadClient() {
 function UploadStatusBadge({ status }: { status: ItemStatus }) {
   // 5-color model: pending = waiting (amber), uploading = transit (sky),
   // success = completed (green), failed = exception (red).
-  const tone = status === "success" ? "completed" : status === "failed" ? "exception" : status === "uploading" ? "transit" : "waiting";
+  const tone = status === "success" ? "completed" : status === "failed" ? "exception" : status === "uploading" || status === "compressing" ? "transit" : "waiting";
   return <StatusBadge tone={tone}>{status}</StatusBadge>;
 }
 

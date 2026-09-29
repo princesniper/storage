@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FolderBrowser from "@/components/folders/folder-browser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
+import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
+import type { CompressionMode } from "@/lib/compression/types";
 
 type FolderItem = {
   id: number;
@@ -26,8 +28,10 @@ type UploadItem = {
   file: File;
   relativePath: string;
   folderPath: string;
-  status: "pending" | "uploading" | "success" | "failed";
+  status: "pending" | "compressing" | "uploading" | "success" | "failed";
   progress: number;
+  compressionProgress: number;
+  compressionDetail?: string;
   loadedBytes: number;
   speedBps: number;
   telegramProgress: number;
@@ -44,6 +48,27 @@ type DirEntry = FileSystemDirectoryEntry & { createReader: () => FileSystemDirec
 // Telegram MTProto uploads are intentionally serialized. Browser-side parallel
 // uploads can trigger Telegram flood limits and turn a healthy upload into 502s.
 const CONCURRENCY = 1;
+const COMPRESSION_CONCURRENCY = 2;
+
+function createLimiter(concurrency: number) {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const pump = () => {
+    while (active < concurrency && queue.length > 0) {
+      active += 1;
+      queue.shift()?.();
+    }
+  };
+  return <T,>(task: () => Promise<T>) => new Promise<T>((resolve, reject) => {
+    queue.push(() => {
+      task().then(resolve, reject).finally(() => {
+        active -= 1;
+        pump();
+      });
+    });
+    pump();
+  });
+}
 
 function normalizeRelativePath(path: string): string {
   return path.replaceAll("\\", "/").split("/").filter(Boolean).join("/");
@@ -173,6 +198,7 @@ export default function FoldersClient() {
   const [rootName, setRootName] = useState("");
   const [rootId, setRootId] = useState<number | null>(null);
   const [channelId, setChannelId] = useState("");
+  const [compressionMode, setCompressionMode] = useState<CompressionMode>("auto");
   const folderIdsRef = useRef<Record<string, number> | null>(null);
 
   const { data: channels = [] } = useQuery<StorageChannel[]>({
@@ -197,7 +223,9 @@ export default function FoldersClient() {
   const parentFolderId = Number(searchParams.get("parentFolderId")) || null;
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
-  const currentItem = useMemo(() => items.find((i) => i.status === "uploading") ?? null, [items]);
+  const currentItem = useMemo(() => items.find((i) => i.status === "uploading" || i.status === "compressing") ?? null, [items]);
+
+  useEffect(() => () => disposeCompressionResources(), []);
 
   const patch = (id: string, value: Partial<UploadItem>) =>
     setItems((prev) => prev.map((item) => item.id === id ? { ...item, ...value } : item));
@@ -224,6 +252,7 @@ export default function FoldersClient() {
           folderPath,
           status: "pending" as const,
           progress: 0,
+          compressionProgress: 0,
           loadedBytes: 0,
           speedBps: 0,
           telegramProgress: 0,
@@ -410,14 +439,47 @@ export default function FoldersClient() {
         folderIdsRef.current = resolved;
       }
       if (!resolved[rootName]) throw new Error("Root folder was not resolved");
-      const work = [...queue];
-      const workers = Array.from({ length: Math.min(CONCURRENCY, work.length) }, async () => {
-        while (work.length && !abortRef.current) {
-          const item = work.shift();
-          if (item) await uploadOne(item, resolved);
-        }
-      });
-      await Promise.all(workers);
+      const upload = createLimiter(CONCURRENCY);
+      const compression = createLimiter(COMPRESSION_CONCURRENCY);
+      const videoCompression = createLimiter(1);
+      const uploadPromises: Promise<void>[] = [];
+
+      await Promise.all(queue.map((item) => compression(async () => {
+        if (abortRef.current) return;
+        patch(item.id, {
+          status: "compressing",
+          compressionProgress: 0,
+          compressionDetail: "Preparing local compression",
+        });
+
+        const compressTask = () => compressFile(item.file, compressionMode, (state) => {
+          if (abortRef.current) return;
+          patch(item.id, {
+            status: "compressing",
+            compressionProgress: state.progress ?? 0,
+            compressionDetail: state.detail,
+          });
+        });
+
+        const result = item.file.type.startsWith("video/")
+          ? await videoCompression(compressTask)
+          : await compressTask();
+
+        if (abortRef.current) return;
+
+        patch(item.id, {
+          file: result.file,
+          compressionProgress: 100,
+          compressionDetail: result.compressed ? "Compressed locally" : "Uploading original",
+        });
+
+        uploadPromises.push(upload(() => uploadOne({
+          ...item,
+          file: result.file,
+          status: "pending",
+        }, resolved)));
+      })));
+      await Promise.all(uploadPromises);
       await qc.invalidateQueries({ queryKey: ["folders"] });
     } catch (error) {
       toast({ title: "Folder upload stopped", description: error instanceof Error ? error.message : "Unexpected error", variant: "destructive" });
@@ -450,6 +512,16 @@ export default function FoldersClient() {
             </select>
           </div>
 
+          <div className="flex max-w-xl flex-col gap-2">
+            <label className="text-sm font-medium">Compression</label>
+            <select value={compressionMode} onChange={(e) => setCompressionMode(e.target.value as CompressionMode)} disabled={uploading} className="h-10 rounded-md border bg-background px-3 text-sm">
+              <option value="original">Original</option>
+              <option value="balanced">Balanced</option>
+              <option value="auto">Auto</option>
+            </select>
+            <p className="text-xs text-muted-foreground">Runs locally in your browser. Files over 800 MB upload as original.</p>
+          </div>
+
           <div onClick={() => inputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} className={cn("rounded-2xl border-2 border-dashed p-10 text-center transition-colors cursor-pointer", dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30")}>
             <UploadCloud className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
             <div className="font-medium">{dragOver ? "Drop folder here" : "Drag & drop a complete desktop folder here"}</div>
@@ -471,7 +543,7 @@ export default function FoldersClient() {
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span>Transfer speed: {stats.speedBps > 0 ? formatBytes(stats.speedBps) + "/s" : "—"}</span>
                 <span>ETA: {stats.etaSeconds !== null ? Math.floor(stats.etaSeconds / 60) + "m " + (stats.etaSeconds % 60) + "s" : "Calculating…"}</span>
-                <span>{currentItem ? (currentItem.stage === "browser" ? "Browser → server" : currentItem.stage === "telegram" ? "Server → storage" : "Finalizing upload") : "—"}</span>
+                <span>{currentItem ? (currentItem.status === "compressing" ? "Compressing locally" : currentItem.stage === "browser" ? "Browser → server" : currentItem.stage === "telegram" ? "Server → storage" : "Finalizing upload") : "—"}</span>
               </div>
               {currentItem && (
                 <div className="space-y-2 rounded-xl border bg-muted/20 p-4">
@@ -479,14 +551,16 @@ export default function FoldersClient() {
                     <span className="min-w-0 truncate text-sm font-medium">{currentItem.relativePath}</span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums">{currentItem.progress}%</span>
                   </div>
-                  <Progress value={currentItem.progress} />
+                  <Progress value={currentItem.status === "compressing" ? currentItem.compressionProgress : currentItem.progress} />
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>{formatBytes(currentItem.loadedBytes)} / {formatBytes(currentItem.file.size)}</span>
-                    <span>{currentItem.stage === "browser"
-  ? (currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "Starting…")
-  : currentItem.stage === "telegram"
-    ? (currentItem.telegramSpeedBps > 0 ? formatBytes(currentItem.telegramSpeedBps) + "/s" : "Connecting…")
-    : currentItem.stage === "processing" ? "Finalizing…" : "Complete"}</span>
+                    <span>{currentItem.status === "compressing"
+  ? (currentItem.compressionDetail ?? "Processing locally…")
+  : currentItem.stage === "browser"
+    ? (currentItem.speedBps > 0 ? formatBytes(currentItem.speedBps) + "/s" : "Starting…")
+    : currentItem.stage === "telegram"
+      ? (currentItem.telegramSpeedBps > 0 ? formatBytes(currentItem.telegramSpeedBps) + "/s" : "Connecting…")
+      : currentItem.stage === "processing" ? "Finalizing…" : "Complete"}</span>
                   </div>
                 </div>
               )}
