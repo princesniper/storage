@@ -15,7 +15,6 @@ export interface MediaFile {
   publicUrl: string;
   width: number | null;
   height: number | null;
-  thumbnailUrl: string | null;
   createdAt: string;
   storageChannel: { id: number; name: string };
 }
@@ -73,13 +72,9 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
         {/* Thumbnail / image */}
         <span className="block size-full">
           {isVideo ? (
-            file.thumbnailUrl ? (
-              <img src={file.thumbnailUrl} alt="" loading="lazy" className="size-full object-cover" />
-            ) : (
-              <span className="size-full flex items-center justify-center bg-white/[0.02]">
-                <Film className="size-8 text-muted-foreground/40" aria-hidden />
-              </span>
-            )
+            <span className="size-full flex items-center justify-center bg-white/[0.02]">
+              <Film className="size-8 text-muted-foreground/40" aria-hidden />
+            </span>
           ) : (
             <img src={file.publicUrl} alt="" loading="lazy" className="size-full object-cover" />
           )}

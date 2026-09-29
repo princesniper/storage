@@ -20,7 +20,6 @@ import { NextResponse } from "next/server";
 import { fileTypeFromBuffer } from "file-type";
 import { z } from "zod";
 import sharp from "sharp";
-import { tryCreateVideoThumbnail } from "@/services/video-thumbnail";
 
 const listQuerySchema = z.object({
   search: z.string().max(200).optional().default(""),
@@ -180,21 +179,6 @@ export async function GET(req: Request) {
     select: { id: true, name: true },
   });
 
-  // Resolve canonical thumbnail URLs in one batch query.
-  const thumbIds = [...new Set(files.map((f) => f.thumbnailPublicId).filter((v): v is string => v != null))];
-  const thumbRows = thumbIds.length > 0
-    ? await db.file.findMany({
-        where: { publicId: { in: thumbIds } },
-        select: { publicId: true, sequenceNumber: true, mimeType: true },
-      })
-    : [];
-  const thumbUrlByPublicId = new Map<string, string>();
-  for (const t of thumbRows) {
-    if (t.sequenceNumber != null) {
-      thumbUrlByPublicId.set(t.publicId, canonicalUrl(t.sequenceNumber, t.mimeType));
-    }
-  }
-
   return NextResponse.json({
     files: files.map((f) => ({
       id: f.id,
@@ -207,12 +191,6 @@ export async function GET(req: Request) {
       publicUrl: f.publicUrl,
       width: f.width,
       height: f.height,
-      thumbnailPublicId: f.thumbnailPublicId,
-      thumbnailUrl: f.thumbnailPublicId
-        ? (thumbUrlByPublicId.get(f.thumbnailPublicId) ?? null)
-        : f.mimeType.startsWith("video/") && f.status === "active"
-          ? `/api/files/${f.id}/thumbnail`
-          : null,
       createdAt: f.createdAt,
       storageChannel: f.storageChannel,
       folder: f.folder,
@@ -470,31 +448,6 @@ export async function POST(req: Request) {
     });
   }
 
-  // V2-Feature-7: best-effort video thumbnail (first frame → same channel)
-  let thumbnailPublicId: string | null = null;
-  if (isVideo) {
-    thumbnailPublicId = await tryCreateVideoThumbnail({
-      videoBuffer: buf,
-      videoSequence: sequenceNumber,
-      channelId: channel.id,
-      telegramChannelId: channel.telegramChannelId,
-    });
-    if (thumbnailPublicId) {
-      try {
-        fileRow = await db.file.update({
-          where: { id: fileRow.id },
-          data: { thumbnailPublicId },
-          include: { storageChannel: { select: { id: true, name: true } } },
-        });
-      } catch (e) {
-        logger.warn("thumbnailPublicId persist failed (non-fatal)", {
-          err: e instanceof Error ? e.message : String(e),
-        });
-        thumbnailPublicId = null;
-      }
-    }
-  }
-
   // Get admin id for audit
   const admin = await db.admin.findFirst({ where: { email: adminEmail } });
 
@@ -532,7 +485,6 @@ export async function POST(req: Request) {
       size: Number(fileRow.size),
       width: fileRow.width,
       height: fileRow.height,
-      thumbnailPublicId: fileRow.thumbnailPublicId,
       url: fileRow.publicUrl,
       // Alias — canonical public media URL (https://m.media-growplants.com/images/NNNNNN.ext).
       // `url` is kept for backwards compatibility with the upload client.

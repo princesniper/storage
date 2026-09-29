@@ -23,7 +23,7 @@ type FolderRow = {
   lastModified?: string;
 };
 
-type FileRow = MediaFile & { thumbnailPublicId?: string | null };
+type FileRow = MediaFile;
 
 type ViewMode = "grid" | "list";
 

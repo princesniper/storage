@@ -45,8 +45,6 @@ interface FileRow {
   publicUrl: string;
   width: number | null;
   height: number | null;
-  thumbnailPublicId: string | null;
-  thumbnailUrl: string | null;
   createdAt: string;
   storageChannel: { id: number; name: string };
 }
@@ -670,18 +668,8 @@ function DatePicker({ label, value, onChange }: { label: string; value: string; 
 
 function Thumb({ file, className }: { file: FileRow; className?: string }) {
   if (isVideoMime(file.mimeType)) {
-    if (file.thumbnailUrl) {
-      return (
-        <img
-          src={file.thumbnailUrl}
-          alt=""
-          loading="lazy"
-          className={className ?? "size-full object-cover"}
-        />
-      );
-    }
     return (
-      <span className="size-full flex items-center justify-center bg-muted/40">
+      <span className={cn("size-full flex items-center justify-center bg-muted/40", className)}>
         <Film className="size-6 text-muted-foreground" aria-hidden />
       </span>
     );
