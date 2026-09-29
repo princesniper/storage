@@ -669,9 +669,14 @@ function DatePicker({ label, value, onChange }: { label: string; value: string; 
 function Thumb({ file, className }: { file: FileRow; className?: string }) {
   if (isVideoMime(file.mimeType)) {
     return (
-      <span className={cn("size-full flex items-center justify-center bg-muted/40", className)}>
-        <Film className="size-6 text-muted-foreground" aria-hidden />
-      </span>
+      <video
+        src={file.publicUrl}
+        muted
+        playsInline
+        preload="auto"
+        className={className ?? "size-full object-cover"}
+        aria-label=""
+      />
     );
   }
   return (
