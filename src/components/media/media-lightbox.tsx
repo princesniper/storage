@@ -42,6 +42,7 @@ export function MediaLightbox({
   const [imageError, setImageError] = useState(false);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, Point>());
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const pinchStart = useRef<{ distance: number; zoom: number } | null>(null);
   const dragStart = useRef<{ point: Point; pan: Point } | null>(null);
   const swipeStart = useRef<Point | null>(null);
@@ -180,6 +181,18 @@ export function MediaLightbox({
     }
 
     if (pointers.current.size < 2) pinchStart.current = null;
+  };
+
+  const handleImageDoubleClick = () => {
+    if (zoom > 1) resetView();
+    else setZoom(2);
+  };
+
+  const handleImageWheel = (event: React.WheelEvent<HTMLImageElement>) => {
+    event.preventDefault();
+    setZoom((value) =>
+      Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value + (event.deltaY < 0 ? 0.2 : -0.2)))
+    );
   };
 
   const rotate = () => setRotation((value) => (value + 90) % 360);
@@ -341,16 +354,9 @@ export function MediaLightbox({
                   onPointerMove={onPointerMove}
                   onPointerUp={finishPointer}
                   onPointerCancel={finishPointer}
-                  onDoubleClick={() => {
-                    if (zoom > 1) resetView();
-                    else setZoom(2);
-                  }}
-                  onWheel={(event) => {
-                    event.preventDefault();
-                    setZoom((value) =>
-                      Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value + (event.deltaY < 0 ? 0.2 : -0.2)))
-                    );
-                  }}
+                  ref={imageRef}
+                  onDoubleClick={handleImageDoubleClick}
+                  onWheel={handleImageWheel}
                   className={cn(
                     mediaFitClass,
                     "block rounded-xl border border-white/10 bg-black object-contain shadow-2xl select-none touch-none",
