@@ -415,7 +415,6 @@ export function MediaLightbox({
           </div>
         )}
       </div>
-      </div>
     ),
     document.body
   );
