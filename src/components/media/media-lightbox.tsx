@@ -153,7 +153,11 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
     if (zoom + delta <= MIN_ZOOM) setPan({ x: 0, y: 0 });
   };
 
-  const copyUrl = async () => {\n    try { await navigator.clipboard.writeText(file?.publicUrl ?? ""); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch {}\n  };\n\n  const toggleFullscreen = async () => {
+  const copyUrl = async () => {
+    try { await navigator.clipboard.writeText(file?.publicUrl ?? ""); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch {}
+  };
+
+  const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await viewportRef.current?.requestFullscreen();
@@ -199,10 +203,12 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
           <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" asChild>
             <a href={file.publicUrl} target="_blank" rel="noreferrer" aria-label="Open file in new tab" title="Open in new tab"><ExternalLink className="size-4" /></a>
           </Button>
-        </div>\n        <div className="absolute top-4 left-4 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur">
+        </div>
+        <div className="absolute top-4 left-4 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur">
           {!isVideo && <>
             <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(0.25)} aria-label="Zoom in"><Plus className="size-4" /></Button>
-            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(-0.25)} aria-label="Zoom out"><Minus className="size-4" /></Button>\n            <span className="min-w-10 text-center text-[10px] font-mono text-white/60">{Math.round(zoom * 100)}%</span>
+            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(-0.25)} aria-label="Zoom out"><Minus className="size-4" /></Button>
+            <span className="min-w-10 text-center text-[10px] font-mono text-white/60">{Math.round(zoom * 100)}%</span>
             <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={resetView} aria-label="Reset zoom"><RotateCcw className="size-4" /></Button>
           </>}
           <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}><Maximize2 className="size-4" /></Button>
