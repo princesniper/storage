@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minus, Plus, RotateCcw, Download, Copy, Check } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, MoreVertical, RotateCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isVideoMime } from "@/lib/format";
@@ -26,7 +26,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
   const currentIndex = file ? siblings.indexOf(file.id) : -1;
   const hasPrev = currentIndex > 0;
   const hasNext = currentIndex >= 0 && currentIndex < siblings.length - 1;
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(1);\n  const [rotation, setRotation] = useState(0);\n  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -73,7 +73,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
       if (event.key === "Escape") onClose();
       else if (event.key === "ArrowLeft") goPrev();
       else if (event.key === "ArrowRight") goNext();
-      else if (event.key === "0") resetView();
+      else if (event.key === "0") resetView();\n      else if (event.key === "r" || event.key === "R") setRotation((value) => (value + 90) % 360);
       else if (event.key === "+" || event.key === "=") setZoom((value) => Math.min(MAX_ZOOM, value + 0.25));
       else if (event.key === "-") setZoom((value) => Math.max(MIN_ZOOM, value - 0.25));
     };
@@ -193,26 +193,26 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
           </div>
         </div>
 
-        <div className="absolute top-4 right-16 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur border border-white/[0.08]">
-          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={copyUrl} aria-label="Copy public URL" title="Copy public URL">
-            {copied ? <Check className="size-4 text-emerald-400" /> : <Copy className="size-4" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" asChild>
-            <a href={`/api/files/${file.id}/download`} download aria-label="Download file" title="Download file"><Download className="size-4" /></a>
-          </Button>
-          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" asChild>
-            <a href={file.publicUrl} target="_blank" rel="noreferrer" aria-label="Open file in new tab" title="Open in new tab"><ExternalLink className="size-4" /></a>
+        <div className="absolute right-4 top-4 z-40 flex items-center gap-1">
+          <div className="relative">
+            <Button variant="ghost" size="icon" className={cn("size-10 rounded-xl border border-white/[0.08] bg-black/45 text-white/80 backdrop-blur-md hover:bg-white/10 hover:text-white", isInspectorOpen && "bg-white/15 text-white")} onClick={() => setIsInspectorOpen((value) => !value)} aria-label="Open file inspector and actions" aria-expanded={isInspectorOpen}>
+              <MoreVertical className="size-5" />
+            </Button>
+            {isInspectorOpen && (
+              <div className="absolute right-0 top-12 z-50 w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/[0.1] bg-[#111113]/[98%] shadow-2xl shadow-black/50 backdrop-blur-xl" onClick={(event) => event.stopPropagation()}>
+                <MediaInspector file={file} onClose={() => setIsInspectorOpen(false)} onDeleted={() => { onDeleted?.(); onClose(); }} />
+              </div>
+            )}
+          </div>
+          <Button variant="ghost" size="icon" className="size-10 rounded-xl border border-white/[0.08] bg-black/45 text-white/80 backdrop-blur-md hover:bg-white/10 hover:text-white" onClick={onClose} aria-label="Close preview">
+            <X className="size-5" />
           </Button>
         </div>
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur">
-          {!isVideo && <>
-            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(0.25)} aria-label="Zoom in"><Plus className="size-4" /></Button>
-            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(-0.25)} aria-label="Zoom out"><Minus className="size-4" /></Button>
-            <span className="min-w-10 text-center text-[10px] font-mono text-white/60">{Math.round(zoom * 100)}%</span>
-            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={resetView} aria-label="Reset zoom"><RotateCcw className="size-4" /></Button>
-          </>}
-          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}><Maximize2 className="size-4" /></Button>
-        </div>
+        {!isVideo && (
+          <Button variant="ghost" className="absolute bottom-4 right-4 z-30 h-9 rounded-xl border border-white/[0.08] bg-black/45 px-3 text-white/85 backdrop-blur-md hover:bg-white/10 hover:text-white" onClick={() => setRotation((value) => (value + 90) % 360)} aria-label="Rotate image 90 degrees" title="Rotate image 90° (R)">
+            <RotateCw className="mr-2 size-4" />Rotate
+          </Button>
+        )}
 
         <div className="relative max-w-full max-h-full flex items-center justify-center" onClick={(event) => event.stopPropagation()}>
           {isVideo ? (
@@ -231,7 +231,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
               onDoubleClick={() => { if (zoom > 1) resetView(); else setZoom(2); }}
               onWheel={(event) => { event.preventDefault(); zoomBy(event.deltaY < 0 ? 0.2 : -0.2); }}
               className="max-w-full max-h-[82vh] rounded-xl shadow-2xl border border-white/[0.06] object-contain select-none touch-none"
-              style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center", cursor: zoom > 1 ? "grab" : "zoom-in", transition: pointers.current.size ? "none" : "transform 120ms ease-out" }}
+              style={{ transform: `translate(${pan.x}px, ${pan.y}px) rotate(${rotation}deg) scale(${zoom})`, transformOrigin: "center", cursor: zoom > 1 ? "grab" : "zoom-in", transition: pointers.current.size ? "none" : "transform 120ms ease-out" }}
             />
           )}
         </div>
@@ -239,9 +239,6 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
         {siblings.length > 1 && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur border border-white/[0.08]">{currentIndex + 1} / {siblings.length} · Swipe or use ← →</div>}
       </div>
 
-      <div className="relative z-10 w-full shrink-0 flex flex-col border-t border-white/[0.08] bg-[#111113] overflow-y-auto max-h-[42%] md:max-h-none md:w-full md:max-w-xs md:border-t-0 md:border-l" onClick={(e) => e.stopPropagation()}>
-        <MediaInspector file={file} onClose={onClose} onDeleted={() => { onDeleted?.(); onClose(); }} />
-      </div>
     </div>
   );
 }
