@@ -23,7 +23,6 @@ import { Trash2, ExternalLink, Search, ImageIcon, CalendarIcon, X, LayoutGrid, L
 import { useToast } from "@/hooks/use-toast";
 import { useLocalStorageState } from "@/hooks/use-local-storage-state";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import FileDetailModal from "@/components/files/file-detail-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { FileStatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -625,17 +624,6 @@ export default function FilesClient() {
         onDeleted={() => qc.invalidateQueries({ queryKey: ["files"] })}
       />
 
-      {/* Legacy modal fallback for when file not in current page */}
-      {detailId && !files.find((f) => f.id === detailId) && (
-        <FileDetailModal
-          fileId={detailId}
-          open={detailOpen}
-          onClose={() => setDetailOpen(false)}
-          onDeleted={() => qc.invalidateQueries({ queryKey: ["files"] })}
-          siblings={siblingIds}
-          onNavigate={(id) => setDetailId(id)}
-        />
-      )}
     </div>
   );
 }
