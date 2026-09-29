@@ -121,9 +121,8 @@ export default function FolderBrowser() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewMode>("grid");
   const [openFile, setOpenFile] = useState<FileRow | null>(null);
-  const [shareBusy, setShareBusy] = useState(false);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [shareRevoking, setShareRevoking] = useState(false);\n  const [folderActionId, setFolderActionId] = useState<number | null>(null);\n  const [shareStatus, setShareStatus] = useState<Record<number, boolean>>({});
+  const [folderActionId, setFolderActionId] = useState<number | null>(null);
+  const [shareStatus, setShareStatus] = useState<Record<number, boolean>>({});
 
   const shareQuery = useQuery<{ active: boolean }>({
     queryKey: ["folder-share", folderId],
