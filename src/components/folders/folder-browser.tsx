@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft, ChevronRight, FileArchive, FileCode2, FileText, Folder,
+  ArrowLeft, ChevronRight, Download, FileArchive, FileCode2, FileText, Folder,
   FolderOpen, Grid2X2, Image as ImageIcon, List, Play, Search, Video,
   FileSpreadsheet, File, Link2, Trash2
 } from "lucide-react";
@@ -57,21 +57,26 @@ function FileCard({ file, onOpen }: { file: FileRow; onOpen: () => void }) {
   const isVideo = isVideoMime(file.mimeType);
   const Icon = iconFor(file.mimeType);
   return (
-    <button onClick={onOpen} className="group overflow-hidden rounded-2xl border border-border/70 bg-card text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
-      <div className="aspect-square bg-muted/30">
-        {isImage ? (
-          <img src={file.publicUrl} alt={file.originalName} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]" />
-        ) : isVideo ? (
-          <div className="relative flex h-full items-center justify-center"><Video className="h-12 w-12 text-muted-foreground/50" /><span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-white"><Play className="mr-1 inline h-3 w-3 fill-current" />VIDEO</span></div>
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground"><Icon className="h-12 w-12" /><span className="max-w-[80%] truncate text-xs">{file.mimeType.split("/").pop()}</span></div>
-        )}
-      </div>
-      <div className="p-3">
-        <div className="truncate text-sm font-medium">{file.originalName}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{formatBytes(file.size)} · {formatDate(file.createdAt)}</div>
-      </div>
-    </button>
+    <div className="group overflow-hidden rounded-2xl border border-border/70 bg-card text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg">
+      <button type="button" onClick={onOpen} className="block w-full text-left">
+        <div className="aspect-square bg-muted/30">
+          {isImage ? (
+            <img src={file.publicUrl} alt={file.originalName} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-[1.02]" />
+          ) : isVideo ? (
+            <div className="relative flex h-full items-center justify-center"><Video className="h-12 w-12 text-muted-foreground/50" /><span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-2 py-1 text-[10px] font-medium text-white"><Play className="mr-1 inline h-3 w-3 fill-current" />VIDEO</span></div>
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground"><Icon className="h-12 w-12" /><span className="max-w-[80%] truncate text-xs">{file.mimeType.split("/").pop()}</span></div>
+          )}
+        </div>
+        <div className="p-3 pb-2">
+          <div className="truncate text-sm font-medium">{file.originalName}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{formatBytes(file.size)} · {formatDate(file.createdAt)}</div>
+        </div>
+      </button>
+      <a href={`/api/files/${file.id}/download`} className="flex items-center justify-center gap-2 border-t border-border/70 px-3 py-2 text-xs font-medium hover:bg-muted/50">
+        <Download className="h-3.5 w-3.5" />Download
+      </a>
+    </div>
   );
 }
 
@@ -216,6 +221,7 @@ export default function FolderBrowser() {
         <div className="flex flex-wrap gap-2">
           {current && <Button variant="outline" onClick={() => router.push(`/upload?folderId=${current.id}`)}><Folder className="mr-2 h-4 w-4" />Upload Files</Button>}
           <Button variant="outline" onClick={() => router.push("/folders?upload=1")}><FolderOpen className="mr-2 h-4 w-4" />Upload Folder</Button>
+          {current && <Button variant="outline" asChild><a href={`/api/folders/${current.id}/download`}><Download className="mr-2 h-4 w-4" />Download Folder</a></Button>}
           {current && <Button variant="outline" onClick={generateShareLink} disabled={shareBusy}><Link2 className="mr-2 h-4 w-4" />{shareBusy ? "Generating…" : shareCopied ? "Link Copied" : shareQuery.data?.active ? "Generate New Link" : "Create Share Link"}</Button>}
           {current && shareQuery.data?.active && <Button variant="outline" onClick={revokeShareLink} disabled={shareRevoking}><Trash2 className="mr-2 h-4 w-4" />{shareRevoking ? "Revoking…" : "Revoke Share"}</Button>}
           {current && <Button variant="destructive" onClick={deleteCurrentFolder} disabled={deleteBusy}><Trash2 className="mr-2 h-4 w-4" />{deleteBusy ? "Deleting…" : "Delete Folder"}</Button>}
@@ -236,7 +242,7 @@ export default function FolderBrowser() {
         <>
           {childFolders.length > 0 && <section className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Folders</h2><div className={cn(view === "grid" ? "grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "space-y-2")}>{childFolders.map((f) => view === "grid" ? <FolderCard key={f.id} folder={f} onOpen={() => go(f.id)} /> : <button key={f.id} onClick={() => go(f.id)} className="flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:bg-muted/40"><Folder className="h-5 w-5 text-primary" /><span className="flex-1 truncate">{f.name}</span><span className="text-xs text-muted-foreground">{f.totalFileCount ?? f.fileCount} files · {formatBytes(f.totalSize ?? 0)}</span></button>)}</div></section>}
 
-          {folderId !== null && files.length > 0 && <section className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Files</h2>{view === "grid" ? <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">{files.map((f) => <FileCard key={f.id} file={f} onOpen={() => setOpenFile(f)} />)}</div> : <div className="divide-y rounded-xl border">{files.map((f) => <button key={f.id} onClick={() => setOpenFile(f)} className="flex w-full items-center gap-3 p-3 text-left hover:bg-muted/40"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">{f.mimeType.startsWith("image/") ? <ImageIcon className="h-5 w-5" /> : <File className="h-5 w-5" />}</div><span className="flex-1 truncate text-sm">{f.originalName}</span><span className="text-xs text-muted-foreground">{f.mimeType.split("/").pop()}</span><span className="w-20 text-right text-xs text-muted-foreground">{formatBytes(f.size)}</span></button>)}</div>}</section>}
+          {folderId !== null && files.length > 0 && <section className="space-y-3"><h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Files</h2>{view === "grid" ? <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">{files.map((f) => <FileCard key={f.id} file={f} onOpen={() => setOpenFile(f)} />)}</div> : <div className="divide-y rounded-xl border">{files.map((f) => <div key={f.id} className="flex items-center gap-3 p-3 hover:bg-muted/40"><button type="button" onClick={() => setOpenFile(f)} className="flex min-w-0 flex-1 items-center gap-3 text-left"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">{f.mimeType.startsWith("image/") ? <ImageIcon className="h-5 w-5" /> : <File className="h-5 w-5" />}</div><span className="truncate text-sm">{f.originalName}</span><span className="hidden text-xs text-muted-foreground sm:inline">{f.mimeType.split("/").pop()}</span><span className="hidden w-20 text-right text-xs text-muted-foreground sm:inline">{formatBytes(f.size)}</span></button><a href={`/api/files/${f.id}/download`} className="flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium hover:bg-muted"><Download className="h-3.5 w-3.5" /><span className="hidden sm:inline">Download</span></a></div>)}</div>}</section>}
 
           {folderId !== null && !childFolders.length && !files.length && <div className="rounded-2xl border p-12 text-center"><Folder className="mx-auto h-12 w-12 text-muted-foreground/40" /><h3 className="mt-3 font-medium">This folder is empty</h3><p className="mt-1 text-sm text-muted-foreground">Upload files to this folder to get started.</p></div>}
           {folderId === null && !childFolders.length && <div className="rounded-2xl border p-12 text-center"><Folder className="mx-auto h-12 w-12 text-muted-foreground/40" /><h3 className="mt-3 font-medium">No folders yet</h3></div>}
