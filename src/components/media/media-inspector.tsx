@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { X, ExternalLink, Trash2, Copy, Check } from "lucide-react";
+import { X, ExternalLink, Trash2, Copy, Check, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -17,8 +17,7 @@ import { formatBytes, formatDateTime } from "@/lib/format";
 import { FileStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import type { MediaFile } from "./media-card";
-
-const MEDIA_ORIGIN = "https://m.media-growplants.com";
+import { canonicalUrl as buildCanonicalUrl } from "@/lib/media-url";
 
 interface MediaInspectorProps {
   file: MediaFile;
@@ -43,8 +42,8 @@ export function MediaInspector({ file, onClose, onDeleted }: MediaInspectorProps
 
   const seq = file.sequenceNumber !== null ? String(file.sequenceNumber).padStart(6, "0") : "——";
   // Reconstruct canonical URL if publicUrl doesn't already use the media origin
-  const canonicalUrl = file.publicUrl.startsWith(MEDIA_ORIGIN)
-    ? file.publicUrl
+  const canonicalUrl = file.sequenceNumber !== null
+    ? buildCanonicalUrl(file.sequenceNumber, file.mimeType)
     : file.publicUrl;
 
   const handleCopy = async () => {
