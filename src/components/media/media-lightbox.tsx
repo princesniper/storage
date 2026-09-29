@@ -1,7 +1,8 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, ChevronLeft, ChevronRight, MoreVertical, RotateCw, Loader2, AlertTriangle } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, MoreVertical, RotateCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isVideoMime } from "@/lib/format";
@@ -38,14 +39,14 @@ export function MediaLightbox({
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
-  const [isImageLoading, setIsImageLoading] = useState(false);
-  const [imageError, setImageError] = useState(false);
+  const [mediaError, setMediaError] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
   const pointers = useRef(new Map<number, Point>());
-  const imageRef = useRef<HTMLImageElement | null>(null);
   const pinchStart = useRef<{ distance: number; zoom: number } | null>(null);
   const dragStart = useRef<{ point: Point; pan: Point } | null>(null);
   const swipeStart = useRef<Point | null>(null);
+  const videoTouchStart = useRef<Point | null>(null);
 
   const resetView = useCallback(() => {
     setZoom(1);
@@ -66,11 +67,14 @@ export function MediaLightbox({
   }, [hasNext, onNavigate, siblings, currentIndex]);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     resetView();
     setIsInspectorOpen(false);
-    setImageError(false);
-    setIsImageLoading(Boolean(file && !isVideoMime(file.mimeType)));
+    setMediaError(false);
   }, [file?.id, file?.mimeType, open, resetView]);
 
   useEffect(() => {
@@ -112,6 +116,7 @@ export function MediaLightbox({
       pinchStart.current = null;
       dragStart.current = null;
       swipeStart.current = null;
+      videoTouchStart.current = null;
     }
   }, [open]);
 
@@ -197,15 +202,36 @@ export function MediaLightbox({
 
   const rotate = () => setRotation((value) => (value + 90) % 360);
 
-  if (!open || !file) return null;
+  const handleVideoTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    videoTouchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleVideoTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = videoTouchStart.current;
+    videoTouchStart.current = null;
+    if (!start || !isVideo) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dy) <= SWIPE_VERTICAL_TOLERANCE) {
+      if (dx > 0) goPrev();
+      else goNext();
+    }
+  };
+
+  if (!mounted || !open || !file) return null;
 
   const isVideo = isVideoMime(file.mimeType);
   const mediaFitClass = rotation % 180 === 0
     ? "max-w-[min(92vw,1200px)] max-h-[min(82dvh,900px)]"
     : "max-w-[min(82dvh,900px)] max-h-[min(92vw,1200px)]";
 
-  return (
-    <div
+  return createPortal(
+    (
+      <div
       className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-md animate-in fade-in duration-[var(--duration-modal)]"
       role="dialog"
       aria-modal="true"
@@ -305,72 +331,65 @@ export function MediaLightbox({
         )}
 
         <div
-          className="relative flex h-full w-full items-center justify-center"
+          className={cn(
+            "relative flex h-full w-full items-center justify-center",
+            isVideo && "touch-pan-y"
+          )}
           onClick={(event) => event.stopPropagation()}
+          onTouchStart={isVideo ? handleVideoTouchStart : undefined}
+          onTouchEnd={isVideo ? handleVideoTouchEnd : undefined}
         >
-          {isVideo ? (
+          {mediaError ? (
+            <div className="flex max-w-[min(92vw,420px)] flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/65 px-6 py-8 text-center text-white/80 backdrop-blur-xl">
+              <AlertTriangle className="size-8 text-amber-300" />
+              <div>
+                <p className="text-sm font-medium text-white">Preview could not be loaded</p>
+                <p className="mt-1 text-xs text-white/55">The file may be temporarily unavailable. Try opening it in a new tab.</p>
+              </div>
+              <Button asChild size="sm" variant="secondary">
+                <a href={file.publicUrl} target="_blank" rel="noreferrer">Open file</a>
+              </Button>
+            </div>
+          ) : isVideo ? (
             <video
               key={file.id}
               src={file.publicUrl}
+              poster={file.thumbnailUrl ?? undefined}
               controls
+              preload="metadata"
               playsInline
+              onLoadedData={() => setMediaError(false)}
+              onError={() => setMediaError(true)}
               className="max-h-[min(82dvh,900px)] max-w-[min(92vw,1200px)] rounded-xl border border-white/10 bg-black object-contain shadow-2xl"
             />
           ) : (
-            <>
-              {isImageLoading && !imageError && (
-                <div className="absolute z-10 flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-4 py-3 text-xs text-white/70 backdrop-blur-xl">
-                  <Loader2 className="size-5 animate-spin" />
-                  Loading preview…
-                </div>
+            <img
+              key={file.id}
+              src={file.publicUrl}
+              alt={file.originalName}
+              draggable={false}
+              onLoad={() => setMediaError(false)}
+              onError={() => setMediaError(true)}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={finishPointer}
+              onPointerCancel={finishPointer}
+              onDoubleClick={handleImageDoubleClick}
+              onWheel={handleImageWheel}
+              className={cn(
+                mediaFitClass,
+                "block rounded-xl border border-white/10 bg-black object-contain shadow-2xl select-none touch-none",
+                zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
               )}
-
-              {imageError ? (
-                <div className="flex max-w-[min(92vw,420px)] flex-col items-center gap-3 rounded-2xl border border-white/10 bg-black/65 px-6 py-8 text-center text-white/80 backdrop-blur-xl">
-                  <AlertTriangle className="size-8 text-amber-300" />
-                  <div>
-                    <p className="text-sm font-medium text-white">Preview could not be loaded</p>
-                    <p className="mt-1 text-xs text-white/55">The file may be temporarily unavailable. Try opening it in a new tab.</p>
-                  </div>
-                  <Button asChild size="sm" variant="secondary">
-                    <a href={file.publicUrl} target="_blank" rel="noreferrer">Open file</a>
-                  </Button>
-                </div>
-              ) : (
-                <img
-                  key={file.id}
-                  src={file.publicUrl}
-                  alt={file.originalName}
-                  draggable={false}
-                  onLoad={() => {
-                    setIsImageLoading(false);
-                    setImageError(false);
-                  }}
-                  onError={() => {
-                    setIsImageLoading(false);
-                    setImageError(true);
-                  }}
-                  onPointerDown={onPointerDown}
-                  onPointerMove={onPointerMove}
-                  onPointerUp={finishPointer}
-                  onPointerCancel={finishPointer}
-                  ref={imageRef}
-                  onDoubleClick={handleImageDoubleClick}
-                  onWheel={handleImageWheel}
-                  className={cn(
-                    mediaFitClass,
-                    "block rounded-xl border border-white/10 bg-black object-contain shadow-2xl select-none touch-none",
-                    zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
-                  )}
-                  style={{
-                    transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${zoom})`,
-                    transformOrigin: "center",
-                    transition: pointers.current.size ? "none" : "transform 140ms ease-out",
-                  }}
-                />
-              )}
-            </>
+              style={{
+                transform: \`translate3d(\${pan.x}px, \${pan.y}px, 0) rotate(\${rotation}deg) scale(\${zoom})\`,
+                transformOrigin: "center",
+                transition: pointers.current.size ? "none" : "transform 140ms ease-out",
+              }}
+            />
           )}
+        </div>
+
         </div>
 
         {!isVideo && (
@@ -396,6 +415,8 @@ export function MediaLightbox({
           </div>
         )}
       </div>
-    </div>
+      </div>
+    ),
+    document.body
   );
 }
