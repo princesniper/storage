@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { X, ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minus, Plus, RotateCcw } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minus, Plus, RotateCcw, Download, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isVideoMime } from "@/lib/format";
@@ -28,7 +28,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
   const hasNext = currentIndex >= 0 && currentIndex < siblings.length - 1;
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);\n  const [copied, setCopied] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -152,7 +152,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
     if (zoom + delta <= MIN_ZOOM) setPan({ x: 0, y: 0 });
   };
 
-  const toggleFullscreen = async () => {
+  const copyUrl = async () => {\n    try { await navigator.clipboard.writeText(file?.publicUrl ?? ""); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch {}\n  };\n\n  const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
       else await viewportRef.current?.requestFullscreen();
@@ -181,10 +181,27 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
         {hasPrev && <Button variant="ghost" size="icon" className="absolute left-4 z-20 size-10 text-white/70 hover:text-white hover:bg-white/10 rounded-full" onClick={goPrev} aria-label="Previous file"><ChevronLeft className="size-6" /></Button>}
         {hasNext && <Button variant="ghost" size="icon" className="absolute right-4 z-20 size-10 text-white/70 hover:text-white hover:bg-white/10 rounded-full" onClick={goNext} aria-label="Next file"><ChevronRight className="size-6" /></Button>}
 
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur">
+        <div className="absolute top-4 left-1/2 z-20 -translate-x-1/2 max-w-[60vw] rounded-xl bg-black/55 px-3 py-2 text-center backdrop-blur border border-white/[0.08]">
+          <div className="truncate text-xs font-medium text-white/95">{file.originalName}</div>
+          <div className="mt-0.5 text-[10px] text-white/50">
+            {file.sequenceNumber !== null ? `#${String(file.sequenceNumber).padStart(6, "0")} · ` : ""}{file.mimeType} · {Math.round(file.size / 1024 / 1024 * 10) / 10} MB
+          </div>
+        </div>
+
+        <div className="absolute top-4 right-16 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur border border-white/[0.08]">
+          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={copyUrl} aria-label="Copy public URL" title="Copy public URL">
+            {copied ? <Check className="size-4 text-emerald-400" /> : <Copy className="size-4" />}
+          </Button>
+          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" asChild>
+            <a href={`/api/files/${file.id}/download`} download aria-label="Download file" title="Download file"><Download className="size-4" /></a>
+          </Button>
+          <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" asChild>
+            <a href={file.publicUrl} target="_blank" rel="noreferrer" aria-label="Open file in new tab" title="Open in new tab"><ExternalLink className="size-4" /></a>
+          </Button>
+        </div>\n        <div className="absolute top-4 left-4 z-20 flex items-center gap-1 rounded-xl bg-black/50 p-1 backdrop-blur">
           {!isVideo && <>
             <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(0.25)} aria-label="Zoom in"><Plus className="size-4" /></Button>
-            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(-0.25)} aria-label="Zoom out"><Minus className="size-4" /></Button>
+            <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={() => zoomBy(-0.25)} aria-label="Zoom out"><Minus className="size-4" /></Button>\n            <span className="min-w-10 text-center text-[10px] font-mono text-white/60">{Math.round(zoom * 100)}%</span>
             <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={resetView} aria-label="Reset zoom"><RotateCcw className="size-4" /></Button>
           </>}
           <Button variant="ghost" size="icon" className="size-8 text-white/80 hover:text-white" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}><Maximize2 className="size-4" /></Button>
@@ -212,7 +229,7 @@ export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, 
           )}
         </div>
 
-        {siblings.length > 1 && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 text-[11px] text-white/50"><kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono">←</kbd><span>{currentIndex + 1} / {siblings.length}</span><kbd className="px-1.5 py-0.5 rounded bg-white/[0.06] border border-white/[0.08] font-mono">→</kbd></div>}
+        {siblings.length > 1 && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/55 px-3 py-1.5 text-[11px] text-white/70 backdrop-blur border border-white/[0.08]">{currentIndex + 1} / {siblings.length} · Swipe or use ← →</div>}
       </div>
 
       <div className="relative z-10 w-full shrink-0 flex flex-col border-t border-white/[0.08] bg-[#111113] overflow-y-auto max-h-[42%] md:max-h-none md:w-full md:max-w-xs md:border-t-0 md:border-l" onClick={(e) => e.stopPropagation()}>
