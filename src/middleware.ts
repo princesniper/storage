@@ -36,6 +36,8 @@ export default withAuth(
           path === "/api/status" ||
           path.startsWith("/i/") ||
           path.startsWith("/images/") ||
+          path.startsWith("/shared/folders/") ||
+          path.startsWith("/api/shared/folders/") ||
           path.startsWith("/_next") ||
           path.startsWith("/favicon");
         if (isPublic) return true;
