@@ -16,7 +16,8 @@ import {
 import { CalendarIcon, X, Download, ArrowUpDown, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
-import FileDetailModal from "@/components/files/file-detail-modal";
+import { MediaLightbox } from "@/components/media/media-lightbox";
+import type { MediaFile } from "@/components/media/media-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { AuditStatusBadge } from "@/components/ui/status-badge";
 import { TableSkeleton } from "@/components/ui/skeletons";
@@ -71,6 +72,22 @@ export default function AuditClient({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  const { data: previewFile } = useQuery<MediaFile>({
+    queryKey: ["audit-file-preview", detailId],
+    enabled: detailOpen && detailId !== null,
+    queryFn: async () => {
+      const response = await fetch(`/api/files/${detailId}`);
+      if (!response.ok) throw new Error("Failed to load file preview");
+      const json = await response.json();
+      const file = json.file;
+      return {
+        ...file,
+        storageChannel: file.storageChannel ?? file.channel ?? { id: 0, name: "Storage" },
+      } as MediaFile;
+    },
+    staleTime: 30_000,
+  });
   const pageSize = 50;
 
   const isDefaultFilter =
@@ -351,10 +368,14 @@ export default function AuditClient({
         </div>
       )}
 
-      <FileDetailModal
-        fileId={detailId}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+      <MediaLightbox
+        file={previewFile ?? null}
+        siblings={previewFile ? [previewFile.id] : []}
+        open={detailOpen && !!previewFile}
+        onClose={() => {
+          setDetailOpen(false);
+          setDetailId(null);
+        }}
       />
     </div>
   );

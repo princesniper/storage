@@ -382,7 +382,7 @@ export function MediaLightbox({
                 zoom > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-zoom-in"
               )}
               style={{
-                transform: \`translate3d(\${pan.x}px, \${pan.y}px, 0) rotate(\${rotation}deg) scale(\${zoom})\`,
+                transform: `translate3d(\${pan.x}px, \${pan.y}px, 0) rotate(\${rotation}deg) scale(\${zoom})`,
                 transformOrigin: "center",
                 transition: pointers.current.size ? "none" : "transform 140ms ease-out",
               }}
