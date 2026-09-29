@@ -7,6 +7,7 @@ import { z } from "zod";
 const bodySchema = z.object({
   rootName: z.string().min(1).max(255),
   folderPaths: z.array(z.string().min(1).max(4096)).max(10000),
+  parentFolderId: z.number().int().positive().nullable().optional(),
 });
 
 function normalizePart(part: string): string {
@@ -37,6 +38,10 @@ export async function POST(req: Request) {
   }
 
   let rootName = normalizePart(body.rootName);
+  if (body.parentFolderId !== undefined && body.parentFolderId !== null) {
+    const parent = await db.folder.findUnique({ where: { id: body.parentFolderId }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: "PARENT_FOLDER_NOT_FOUND" }, { status: 404 });
+  }
   if (!rootName || rootName === "." || rootName === ".." || rootName.includes("/") || rootName.includes("\\") || rootName.includes("\0")) {
     return NextResponse.json({ error: "INVALID_ROOT_NAME" }, { status: 400 });
   }
@@ -69,7 +74,7 @@ export async function POST(req: Request) {
         const parts = fullPath.split("/");
         const name = parts[parts.length - 1];
         const parentPath = parts.slice(0, -1).join("/");
-        const parentId = parentPath ? folderIds[parentPath] : null;
+        const parentId = parentPath ? folderIds[parentPath] : (body.parentFolderId ?? null);
         if (parentPath && !parentId) throw new Error("PARENT_FOLDER_NOT_RESOLVED");
 
         let folder = await tx.folder.findFirst({
