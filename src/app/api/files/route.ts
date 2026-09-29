@@ -208,7 +208,11 @@ export async function GET(req: Request) {
       width: f.width,
       height: f.height,
       thumbnailPublicId: f.thumbnailPublicId,
-      thumbnailUrl: f.thumbnailPublicId ? (thumbUrlByPublicId.get(f.thumbnailPublicId) ?? null) : null,
+      thumbnailUrl: f.thumbnailPublicId
+        ? (thumbUrlByPublicId.get(f.thumbnailPublicId) ?? null)
+        : f.mimeType.startsWith("video/") && f.status === "active"
+          ? `/api/files/${f.id}/thumbnail`
+          : null,
       createdAt: f.createdAt,
       storageChannel: f.storageChannel,
       folder: f.folder,
