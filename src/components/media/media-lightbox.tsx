@@ -19,7 +19,8 @@ interface MediaLightboxProps {
 
 type Point = { x: number; y: number };
 
-// Premium preview: rotate is the only persistent media control; file actions live under the three-dot inspector.\nconst MIN_ZOOM = 1;
+// Premium preview: rotate is the only persistent media control; file actions live under the three-dot inspector.
+const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 
 export function MediaLightbox({ file, siblings = [], open, onClose, onNavigate, onDeleted }: MediaLightboxProps) {
