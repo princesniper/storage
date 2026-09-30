@@ -461,7 +461,7 @@ export default function UploadClient() {
             ref={inputRef}
             type="file"
             multiple
-            accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+            accept="image/*,video/*,audio/*"
             onChange={onSelectFile}
             className="hidden"
             id="file-input"

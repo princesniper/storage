@@ -32,5 +32,9 @@ export function shortMime(mime: string): string {
 }
 
 export function isVideoMime(mime: string): boolean {
-  return mime.startsWith("video/");
+  return mime.trim().toLowerCase().startsWith("video/");
+}
+
+export function isAudioMime(mime: string): boolean {
+  return mime.trim().toLowerCase().startsWith("audio/");
 }

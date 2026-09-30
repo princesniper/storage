@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
   LayoutDashboard,
   Image as ImageIcon,
@@ -88,7 +88,7 @@ function useStorageStatus() {
 
 export function DashboardShell({ children, sidebarExtra }: { children: React.ReactNode; sidebarExtra?: React.ReactNode }) {
   const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const { data: session } = useSession();
   const [collapsedRaw, setCollapsedRaw] = useLocalStorageState("sidebar-collapsed", "0");
   const collapsed = collapsedRaw === "1";
@@ -113,13 +113,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
-
-  useEffect(() => {
-    // Keep the first client render identical to SSR. Path-dependent active
-    // navigation styling is applied only after hydration to avoid mismatches
-    // when Next.js/router state changes during hydration.
-    setMounted(true);
-  }, []);
 
   const storageConnected = storageStatus === "connected";
 

@@ -68,6 +68,18 @@ const MIME_TO_EXT: Record<string, string> = {
   "video/mp4": "mp4",
   "video/webm": "webm",
   "video/quicktime": "mov",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/ogg": "ogg",
+  "audio/oga": "oga",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/webm": "webm",
+  "audio/flac": "flac",
+  "audio/x-flac": "flac",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
 };
 
 /** image/jpeg → "jpg" (fallback: subtype after the slash). */

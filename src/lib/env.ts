@@ -29,6 +29,7 @@ const envSchema = z.object({
     [
       "image/jpeg","image/png","image/webp","image/gif","image/svg+xml",
       "video/mp4","video/webm","video/quicktime",
+      "audio/mpeg","audio/wav","audio/x-wav","audio/ogg","audio/oga","audio/mp4","audio/aac","audio/webm","audio/flac","audio/x-flac","audio/m4a","audio/x-m4a",
       "application/pdf","application/zip","application/x-zip-compressed",
       "application/json","application/xml","application/javascript",
       "application/octet-stream","application/vnd.ms-fontobject",
@@ -93,7 +94,23 @@ function loadEnv() {
 
 export const env = loadEnv();
 
-export const allowedMimeTypes = env.ALLOWED_MIME_TYPES.split(",").map((s) => s.trim());
+export const allowedMimeTypes = env.ALLOWED_MIME_TYPES
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+export function normalizeMimeType(mime: string): string {
+  return mime.trim().toLowerCase().split(";")[0] ?? "";
+}
+
+export function isAudioMime(mime: string): boolean {
+  return normalizeMimeType(mime).startsWith("audio/");
+}
+
+export function isAllowedDetectedMime(mime: string): boolean {
+  const normalized = normalizeMimeType(mime);
+  return allowedMimeTypes.includes(normalized) || isAudioMime(normalized);
+}
 // V2: MAX_FILE_SIZE_MB is canonical (default 50). Legacy MAX_IMAGE_SIZE_MB
 // still works as a fallback alias when MAX_FILE_SIZE_MB is unset.
 function resolveMaxFileMb(): number {

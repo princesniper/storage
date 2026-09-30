@@ -225,6 +225,7 @@ export function MediaLightbox({
   if (!mounted || !open || !file) return null;
 
   const isVideo = isVideoMime(file.mimeType);
+  const isAudio = file.mimeType.toLowerCase().startsWith("audio/");
   const mediaFitClass = rotation % 180 === 0
     ? "max-w-[min(92vw,1200px)] max-h-[min(82dvh,900px)]"
     : "max-w-[min(82dvh,900px)] max-h-[min(92vw,1200px)]";
@@ -361,6 +362,22 @@ export function MediaLightbox({
               onError={() => setMediaError(true)}
               className="max-h-[min(82dvh,900px)] max-w-[min(92vw,1200px)] rounded-xl border border-white/10 bg-black object-contain shadow-2xl"
             />
+          ) : isAudio ? (
+            <div className="flex w-full max-w-2xl flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl backdrop-blur-xl">
+              <div className="text-center">
+                <p className="text-sm font-medium text-white/95">{file.originalName}</p>
+                <p className="mt-1 text-xs text-white/45">{file.mimeType}</p>
+              </div>
+              <audio
+                key={file.id}
+                src={file.publicUrl}
+                controls
+                preload="metadata"
+                onCanPlay={() => setMediaError(false)}
+                onError={() => setMediaError(true)}
+                className="w-full"
+              />
+            </div>
           ) : (
             <img
               key={file.id}
@@ -391,7 +408,7 @@ export function MediaLightbox({
 
         </div>
 
-        {!isVideo && (
+        {!isVideo && !isAudio && (
           <Button
             variant="ghost"
             className="absolute bottom-4 right-3 z-30 h-10 rounded-xl border border-white/10 bg-black/55 px-3 text-white/85 shadow-lg backdrop-blur-xl hover:bg-white/10 hover:text-white sm:right-5"

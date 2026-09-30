@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
-import { Film, Copy, Check, Eye, Trash2, Play } from "lucide-react";
+import { Film, Copy, Check, Eye, Trash2, Play, Music } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBytes, isVideoMime } from "@/lib/format";
+import { formatBytes, isVideoMime, isAudioMime } from "@/lib/format";
+import { VideoThumbnail } from "./video-thumbnail";
 
 export interface MediaFile {
   id: number;
@@ -36,6 +37,7 @@ function formatSeq(n: number | null): string {
 export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelete }: MediaCardProps) {
   const [copied, setCopied] = useState(false);
   const isVideo = isVideoMime(file.mimeType);
+  const isAudio = isAudioMime(file.mimeType);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -72,14 +74,14 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
         {/* Thumbnail / image */}
         <span className="block size-full">
           {isVideo ? (
-            <video
+            <VideoThumbnail
               src={file.publicUrl}
-              muted
-              playsInline
-              preload="auto"
+              alt={file.originalName}
               className="size-full object-cover"
-              aria-label=""
+              fallback={<div className="flex size-full items-center justify-center bg-muted/20"><Film className="size-12 text-muted-foreground/50" /></div>}
             />
+          ) : isAudio ? (
+            <div className="flex size-full items-center justify-center bg-muted/20"><Music className="size-12 text-muted-foreground/50" /></div>
           ) : (
             <img src={file.publicUrl} alt="" loading="lazy" className="size-full object-cover" />
           )}

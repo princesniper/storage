@@ -306,17 +306,26 @@ class TelegramServiceImpl {
    */
   private async resolvePeer(peerId: string) {
     if (!this.client) throw new Error(this.notConnectedMessage());
+
+    const normalizedPeerId = peerId.trim();
+    if (!normalizedPeerId) throw new Error("Telegram channel ID is required");
+
     try {
-      return await this.client.getInputEntity(peerId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `Could not resolve Telegram channel ${peerId}: ${msg}. ` +
-          `Ensure the connected account is a member/admin of the channel and the ID is correct.`
-      );
+      return await this.client.getInputEntity(normalizedPeerId);
+    } catch (firstErr) {
+      try {
+        const dialogs = await this.client.getDialogs({ limit: 1000 });
+        const channelId = normalizedPeerId.match(/^-100(\d+)$/)?.[1];
+        const dialog = dialogs.find((d) => {
+          const entity = d.entity;
+          return Boolean(channelId && entity instanceof Api.Channel && entity.id.toString() === channelId);
+        });
+        if (dialog?.entity) return await this.client.getInputEntity(dialog.entity);
+      } catch {}
+      const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+      throw new Error(`Could not resolve Telegram channel ${normalizedPeerId}: ${msg}. The connected Telegram account must be a member/admin of the channel, and the channel must be visible in its dialogs. Ensure the ID is correct and reconnect the account if needed.`);
     }
   }
-
   /** Generic "not connected" error that includes the boot failure, if any. */
   private notConnectedMessage(): string {
     return this.lastError

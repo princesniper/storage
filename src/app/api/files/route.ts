@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { telegramService, setTelegramUploadProgress, clearTelegramUploadProgress } from "@/services/telegram";
 import { audit } from "@/services/audit";
 import { cache } from "@/lib/cache";
-import { env, allowedMimeTypes, maxFileSizeBytes, maxVideoSizeBytes, isVideoMime } from "@/lib/env";
+import { env, allowedMimeTypes, maxFileSizeBytes, maxVideoSizeBytes, isVideoMime, isAudioMime, isAllowedDetectedMime, normalizeMimeType } from "@/lib/env";
 import { generatePublicId } from "@/lib/public-id";
 import { canonicalUrl, formatSequence } from "@/lib/media-url";
 import { rateLimit } from "@/services/rate-limit";
@@ -54,7 +54,7 @@ const TEXT_EXTENSION_MIME: Record<string, string> = {
 function inferSafeTextMime(name: string, declared: string, buf: Buffer): string | null {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   const inferred = TEXT_EXTENSION_MIME[ext];
-  if (!inferred || !allowedMimeTypes.includes(inferred)) return null;
+  if (!inferred || !isAllowedDetectedMime(inferred)) return null;
   if (buf.includes(0)) return null;
   try {
     new TextDecoder("utf-8", { fatal: true }).decode(buf);
@@ -273,7 +273,7 @@ export async function POST(req: Request) {
   // Magic byte MIME check (don't trust filename)
   const detected = await fileTypeFromBuffer(buf);
   const detectedMime = detected?.mime ?? inferSafeTextMime(file.name || "", file.type || "", buf);
-  if (!detectedMime || !allowedMimeTypes.includes(detectedMime)) {
+  if (!detectedMime || !isAllowedDetectedMime(detectedMime)) {
     return NextResponse.json(
       { error: "UNSUPPORTED_MIME", detected: detectedMime ?? "unknown" },
       { status: 415 }
@@ -282,7 +282,7 @@ export async function POST(req: Request) {
   // Cross-check: declared MIME (file.type) vs detected. For safe text formats
   // file-type intentionally has no magic signature, so the extension/text
   // validation above is the authoritative check.
-  if (file.type && allowedMimeTypes.includes(file.type) && file.type !== detectedMime) {
+  if (file.type && isAllowedDetectedMime(file.type) && file.type !== detectedMime) {
     logger.warn("MIME mismatch — using detected", {
       declared: file.type,
       detected: detectedMime,
@@ -291,6 +291,7 @@ export async function POST(req: Request) {
 
   // Per-type size limit (MIME determines the limit)
   const isVideo = isVideoMime(detectedMime);
+  const isAudio = detectedMime.toLowerCase().startsWith("audio/");
   const typeLimit = isVideo ? maxVideoSizeBytes : maxFileSizeBytes;
   if (buf.length > typeLimit) {
     return NextResponse.json(
@@ -298,7 +299,7 @@ export async function POST(req: Request) {
         error: "FILE_TOO_LARGE",
         maxMb: Math.round(typeLimit / 1024 / 1024),
         receivedBytes: buf.length,
-        kind: isVideo ? "video" : "image",
+        kind: isVideo ? "video" : isAudio ? "audio" : "file",
       },
       { status: 413 }
     );
