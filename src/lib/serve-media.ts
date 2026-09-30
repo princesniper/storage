@@ -118,14 +118,21 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
           data: { telegramFileReference: refreshedReferenceB64 },
         });
       }
-      return serveBytes(
-        bytes,
-        file.mimeType,
-        Number(file.size),
-        file.sha256 ?? undefined,
-        true,
-        rangeHeader
-      );
+      const rangeLength = parsed.end - parsed.start + 1;
+      const actualLength = bytes.length;
+      return new Response(toStream(bytes), {
+        status: 206,
+        headers: {
+          "Content-Type": file.mimeType,
+          "Content-Length": String(actualLength),
+          "Content-Range": `bytes ${parsed.start}-${parsed.start + actualLength - 1}/${Number(file.size)}`,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": `public, max-age=${PUBLIC_TTL}, immutable`,
+          "X-Content-Type-Options": "nosniff",
+          "Access-Control-Allow-Origin": "*",
+          ...(file.sha256 ? { "ETag": `"${file.sha256}"` } : {}),
+        },
+      });
     }
 
     const result = await telegramService.downloadFile(
