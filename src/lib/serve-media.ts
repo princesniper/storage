@@ -118,7 +118,6 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
           data: { telegramFileReference: refreshedReferenceB64 },
         });
       }
-      const rangeLength = parsed.end - parsed.start + 1;
       const actualLength = bytes.length;
       return new Response(toStream(bytes), {
         status: 206,
