@@ -26,7 +26,7 @@ interface ChannelList { destinations: ChannelRow[]; storageStatus?: string; }
 const CONCURRENCY = 3;
 const MAX_RETRIES_ON_429 = 3;
 const RETRY_WAIT_S = 5;
-const COMPRESSION_CONCURRENCY = 2;
+const IMAGE_COMPRESSION_CONCURRENCY = 2;
 
 // Upload concurrency remains unchanged. Compression is a separate local preprocessing stage.
 type ItemStatus = "pending" | "compressing" | "uploading" | "success" | "failed";
@@ -259,72 +259,85 @@ export default function UploadClient() {
       toast({ title: "Choose a storage destination", description: "Pick a storage destination before uploading.", variant: "destructive" });
       return;
     }
+
     abortRef.current = false;
     setUploading(true);
     setBatchError(null);
     setItems((prev) => prev.map((i) => (
       i.status === "failed"
-        ? { ...i, status: "pending" as ItemStatus, progress: 0, error: undefined, compressionState: undefined, compressionProgress: undefined, compressionDetail: undefined }
+        ? {
+            ...i,
+            status: "pending" as ItemStatus,
+            progress: 0,
+            error: undefined,
+            compressionState: undefined,
+            compressionProgress: undefined,
+            compressionDetail: undefined,
+          }
         : i
     )));
 
     const snapshot = items.filter((i) => i.status !== "success");
     const upload = createLimiter(CONCURRENCY);
-    const compression = createLimiter(COMPRESSION_CONCURRENCY);
-    const videoCompression = createLimiter(1);
-    const uploadPromises: Promise<void>[] = [];
+    const imageCompression = createLimiter(IMAGE_COMPRESSION_CONCURRENCY);
 
-    await Promise.all(snapshot.map((item) => compression(async () => {
+    // Compression and upload overlap. Videos and other non-image files
+    // never enter the compression queue and upload directly.
+    await Promise.all(snapshot.map(async (item) => {
       if (abortRef.current) return;
 
-      patchItem(item.key, {
-        status: "compressing",
-        compressionState: "analyzing",
-        compressionProgress: 0,
-        compressionDetail: "Preparing local compression",
-        error: undefined,
-      });
+      const isImage = item.file.type.startsWith("image/");
+      if (!isImage) {
+        await upload(() => uploadOne({ ...item, status: "pending" }, channelId));
+        return;
+      }
 
-      const compressTask = () => compressFile(item.file, compressionMode, (state) => {
+      await imageCompression(async () => {
         if (abortRef.current) return;
+
         patchItem(item.key, {
           status: "compressing",
-          compressionState: state.state,
-          compressionProgress: state.progress ?? 0,
-          compressionDetail: state.detail,
+          compressionState: "analyzing",
+          compressionProgress: 0,
+          compressionDetail: "Preparing local image compression",
+          error: undefined,
         });
+
+        const result = await compressFile(item.file, compressionMode, (state) => {
+          if (abortRef.current) return;
+          patchItem(item.key, {
+            status: "compressing",
+            compressionState: state.state,
+            compressionProgress: state.progress,
+            compressionDetail: state.detail,
+          });
+        });
+
+        if (abortRef.current) return;
+
+        patchItem(item.key, {
+          file: result.file,
+          compressed: result.compressed,
+          originalSize: result.originalSize,
+          outputSize: result.outputSize,
+          compressionState: result.compressed ? "ready" : "fallback",
+          compressionProgress: 100,
+          compressionDetail: result.compressed ? "Compressed locally" : "Uploading original",
+        });
+
+        // Start this upload immediately when its image is ready. Other
+        // images may still be compressing in parallel.
+        await upload(() => uploadOne({
+          ...item,
+          file: result.file,
+          status: "pending",
+        }, channelId));
       });
+    }));
 
-      const result = item.file.type.startsWith("video/")
-        ? await videoCompression(compressTask)
-        : await compressTask();
-
-      if (abortRef.current) return;
-
-      patchItem(item.key, {
-        file: result.file,
-        compressed: result.compressed,
-        originalSize: result.originalSize,
-        outputSize: result.outputSize,
-        compressionState: result.compressed ? "ready" : "fallback",
-        compressionProgress: 100,
-        compressionDetail: result.compressed
-          ? "Compressed locally"
-          : (result.fallbackReason === "over-800mb" ? "Large file — uploading original" : "Uploading original"),
-      });
-
-      uploadPromises.push(upload(() => uploadOne({
-        ...item,
-        file: result.file,
-        status: "pending",
-      }, channelId)));
-    })));
-
-    await Promise.all(uploadPromises);
     setUploading(false);
     if (inputRef.current) inputRef.current.value = "";
   };
-
   const cancelAll = () => {
     abortRef.current = true;
     setUploading(false);
@@ -409,7 +422,7 @@ export default function UploadClient() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Compression runs locally in your browser. Files over 800 MB upload as original.
+            Image compression runs locally in your browser. Videos are always uploaded original.
           </p>
         </div>
 
@@ -509,25 +522,43 @@ export default function UploadClient() {
                   <div className="text-xs text-muted-foreground tabular-nums">
                     {formatBytes(item.file.size)} · {item.file.type || "unknown type"}
                   </div>
-                  {item.status === "compressing" && (
-                    <div className="mt-2 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Progress value={item.compressionProgress ?? 0} className="flex-1" aria-label={`Compression progress for ${item.file.name}`} />
-                        <span className="text-[11px] text-muted-foreground tabular-nums w-9 text-right">{item.compressionProgress ?? 0}%</span>
+                  {item.file.type.startsWith("image/") && item.compressionState && (
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Compression · {item.file.name}</span>
+                        <span className="tabular-nums">
+                          {item.compressionState === "compressing" || item.compressionState === "analyzing"
+                            ? "Working…"
+                            : `${item.compressionProgress ?? 100}%`}
+                        </span>
                       </div>
-                      <div className="text-[11px] text-muted-foreground">{item.compressionDetail ?? "Processing locally…"}</div>
+                      <Progress
+                        value={item.compressionState === "compressing" || item.compressionState === "analyzing"
+                          ? undefined
+                          : item.compressionProgress ?? 100}
+                        className={cn(
+                          "flex-1",
+                          (item.compressionState === "compressing" || item.compressionState === "analyzing") && "animate-pulse"
+                        )}
+                        aria-label={`Compression progress for ${item.file.name}`}
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        {item.compressionDetail ?? "Processing locally…"}
+                      </div>
                     </div>
                   )}
                   {item.status === "uploading" && (
-                    <div className="flex items-center gap-2 mt-2">
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>Uploading · {item.file.name}</span>
+                        <span className="tabular-nums">{item.progress}%</span>
+                      </div>
                       <Progress value={item.progress} className="flex-1" aria-label={`Upload progress for ${item.file.name}`} />
-                      <span className="text-[11px] text-muted-foreground tabular-nums w-9 text-right">{item.progress}%</span>
                     </div>
                   )}
-                  {item.status === "pending" && uploading && (
-                    <div className="text-[11px] text-muted-foreground mt-2">Waiting for compression…</div>
-                  )}
-                  {item.retryNote && (
+                  {item.status === "pending" && uploading && item.file.type.startsWith("image/") && !item.compressionState && (
+                    <div className="text-[11px] text-muted-foreground mt-2">Waiting for image compression…</div>
+                  )}                  {item.retryNote && (
                     <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">{item.retryNote}</div>
                   )}
                   {item.error && (
