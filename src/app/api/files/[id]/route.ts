@@ -64,7 +64,8 @@ export async function GET(req: Request, ctx: RouteContext) {
       mimeType: file.mimeType,
       size: Number(file.size),
       status: file.status,
-      publicUrl: file.publicUrl,
+      // Rebuild legacy public URLs from canonical sequence + MIME.
+      publicUrl: file.sequenceNumber != null ? canonicalUrl(file.sequenceNumber, file.mimeType) : file.publicUrl,
       width: file.width,
       height: file.height,
       thumbnailPublicId: file.thumbnailPublicId,

@@ -188,7 +188,10 @@ export async function GET(req: Request) {
       mimeType: f.mimeType,
       size: Number(f.size),
       status: f.status,
-      publicUrl: f.publicUrl,
+      // Rebuild the public URL from sequence + MIME so legacy rows with
+      // malformed stored URLs (e.g. audio/ogg; codecs=opus) are repaired
+      // automatically in API responses without a DB migration.
+      publicUrl: f.sequenceNumber != null ? canonicalUrl(f.sequenceNumber, f.mimeType) : f.publicUrl,
       width: f.width,
       height: f.height,
       createdAt: f.createdAt,
