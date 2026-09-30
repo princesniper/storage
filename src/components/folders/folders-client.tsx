@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FolderBrowser from "@/components/folders/folder-browser";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -189,7 +189,6 @@ function FolderTree({
 export default function FoldersClient() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
-  const qc = useQueryClient();
   const { toast } = useToast();
   const [dragOver, setDragOver] = useState(false);
   const [items, setItems] = useState<UploadItem[]>([]);
