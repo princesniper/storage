@@ -491,9 +491,10 @@ class TelegramServiceImpl {
   }
 
   /**
-   * Download only a byte range from a Telegram document. This is used by
-   * public video Range requests so a large video does not have to be fully
-   * downloaded from Telegram before the browser receives its first bytes.
+   * Download only a byte range from a Telegram document. GramJS exposes
+   * iterDownload for chunked/ranged reads; use the document's BigInteger
+   * value to construct the required offset without adding another runtime
+   * dependency to this application.
    */
   async downloadFileRange(
     peerId: string,
@@ -535,14 +536,33 @@ class TelegramServiceImpl {
       fileReference: doc.fileReference,
       thumbSize: "",
     });
-    const bytes = await this.client.downloadFile(location, {
-      start,
-      end,
+
+    const requestSize = 512 * 1024;
+    const rangeLength = end - start + 1;
+    const offset = doc.size.subtract(doc.size).add(start);
+    const chunkLimit = Math.ceil((rangeLength + requestSize - 1) / requestSize) + 1;
+    const chunks: Buffer[] = [];
+    let remaining = rangeLength;
+
+    for await (const chunk of this.client.iterDownload({
+      file: location,
+      offset,
+      limit: chunkLimit,
+      requestSize,
       fileSize: doc.size,
-    });
-    if (!bytes || typeof bytes === "string") throw new Error("download returned empty");
+    })) {
+      if (remaining <= 0) break;
+      const take = Math.min(chunk.length, remaining);
+      if (take > 0) {
+        chunks.push(chunk.subarray(0, take));
+        remaining -= take;
+      }
+    }
+
+    const bytes = Buffer.concat(chunks);
+    if (bytes.length === 0) throw new Error("download returned empty");
     return {
-      bytes: Buffer.from(bytes),
+      bytes,
       refreshedReferenceB64: refreshed ? newRef : undefined,
     };
   }
