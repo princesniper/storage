@@ -13,7 +13,7 @@
  */
 import { NextResponse } from "next/server";
 import { cache } from "@/lib/cache";
-import { extForMime, mediaPath, parseMediaFilename } from "@/lib/media-url";
+import { canonicalUrl, extForMime, parseMediaFilename } from "@/lib/media-url";
 import {
   NEGATIVE_TTL,
   cacheKeyFor,
@@ -45,10 +45,9 @@ export async function GET(req: Request, ctx: RouteContext) {
   // Canonical extension enforcement (301, same host — works on any domain).
   const canonicalExt = extForMime(dbFile.mimeType);
   if (parsed.ext !== canonicalExt) {
-    const url = new URL(req.url);
-    url.pathname = mediaPath(dbFile.sequenceNumber, dbFile.mimeType);
-    url.search = "";
-    return NextResponse.redirect(url, 301);
+    // Redirect to the configured canonical public origin, never the incoming
+    // Railway/internal request host (for example 0.0.0.0:8080).
+    return NextResponse.redirect(canonicalUrl(dbFile.sequenceNumber, dbFile.mimeType), 301);
   }
 
   return respondWithFileBytes(dbFile, req);

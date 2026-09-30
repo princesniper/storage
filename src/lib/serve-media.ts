@@ -71,7 +71,7 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
   // Cache hit?
   const cached = await cache.getBytes(publicId);
   if (cached) {
-    return serveBytes(cached, file.mimeType, Number(file.size), file.sha256 ?? undefined, isVideo, rangeHeader);
+    return serveBytes(cached, file.mimeType, Number(file.size), file.sha256 ?? undefined, supportsRange, rangeHeader);
   }
 
   // Cache miss → fetch from Telegram.
@@ -203,7 +203,7 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
     db.file.update({ where: { id: file.id }, data: { size: bytes.length } }).catch(() => {});
   }
 
-  return serveBytes(bytes, file.mimeType, bytes.length, etag, isVideo, rangeHeader);
+  return serveBytes(bytes, file.mimeType, bytes.length, etag, supportsRange, rangeHeader);
 }
 
 function serveBytes(
@@ -211,7 +211,7 @@ function serveBytes(
   mimeType: string,
   size: number,
   etag: string | undefined,
-  isVideo: boolean,
+  supportsRange: boolean,
   rangeHeader: string | null
 ): Response {
   const baseHeaders: Record<string, string> = {

@@ -84,7 +84,10 @@ const MIME_TO_EXT: Record<string, string> = {
 
 /** image/jpeg → "jpg" (fallback: subtype after the slash). */
 export function extForMime(mimeType: string): string {
-  const known = MIME_TO_EXT[mimeType];
+  // Stored/browser MIME values may include parameters, e.g. "audio/ogg; codecs=opus".
+  // Extension resolution must use only the MIME essence so the canonical URL stays .ogg.
+  const essence = mimeType.split(";", 1)[0].trim().toLowerCase();
+  const known = MIME_TO_EXT[essence];
   if (known) return known;
   const sub = mimeType.split("/")[1] ?? "bin";
   return sub.replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
