@@ -538,7 +538,7 @@ class TelegramServiceImpl {
     const bytes = await this.client.downloadFile(location, {
       start,
       end,
-      fileSize: Number(doc.size),
+      fileSize: doc.size,
     });
     if (!bytes || typeof bytes === "string") throw new Error("download returned empty");
     return {
