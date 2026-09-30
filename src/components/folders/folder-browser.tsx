@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft, ChevronRight, Download, FileArchive, FileCode2, FileText, Folder,
-  FolderOpen, Grid2X2, Image as ImageIcon, List, Play, Search, Video,
+  FolderOpen, FolderPlus, Grid2X2, Image as ImageIcon, List, Play, Search, Video,
   FileSpreadsheet, File, Link2, Trash2, MoreVertical, Upload, Share2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import { MediaLightbox } from "@/components/media/media-lightbox";
 import type { MediaFile } from "@/components/media/media-card";
 import { formatBytes, formatDate, isVideoMime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type FolderRow = {
@@ -123,6 +124,29 @@ export default function FolderBrowser() {
   const [openFile, setOpenFile] = useState<FileRow | null>(null);
   const [folderActionId, setFolderActionId] = useState<number | null>(null);
   const [shareStatus, setShareStatus] = useState<Record<number, boolean>>({});
+  const { toast } = useToast();
+
+  const createFolder = async () => {
+    const name = window.prompt("New folder name");
+    if (!name?.trim()) return;
+    try {
+      const response = await fetch("/api/folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), parentId: folderId }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.detail || json.error || "Failed to create folder");
+      await foldersQuery.refetch();
+      toast({ title: "Folder created", description: name.trim() });
+    } catch (error) {
+      toast({
+        title: "Folder creation failed",
+        description: error instanceof Error ? error.message : "Could not create folder.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const shareQuery = useQuery<{ active: boolean }>({
     queryKey: ["folder-share", folderId],
@@ -272,6 +296,15 @@ export default function FolderBrowser() {
           <p className="text-sm text-muted-foreground">{current ? `${current.totalFileCount ?? current.fileCount} files · ${formatBytes(current.totalSize ?? 0)}` : "Folders and media stored in your database."}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" onClick={createFolder}>
+            <FolderPlus className="mr-2 size-4" />New Folder
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => router.push(folderId ? `/folders?upload=1&parentFolderId=${folderId}` : "/folders?upload=1")}>
+            <FolderOpen className="mr-2 size-4" />Upload Folder
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => router.push(folderId ? `/upload?folderId=${folderId}` : "/upload")}>
+            <Upload className="mr-2 size-4" />Upload Files
+          </Button>
           {current && <FolderMenu folder={current} shareActive={shareStatus[current.id] ?? shareQuery.data?.active ?? false} shareBusy={folderActionId === current.id} shareRevoking={folderActionId === current.id} onUploadFiles={openUploadFiles} onUploadFolder={openUploadFolder} onDownload={downloadFolder} onGenerateShare={generateShareLink} onRevokeShare={revokeShareLink} onDelete={deleteFolder} />}
         </div>
       </div>
