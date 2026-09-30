@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FolderBrowser from "@/components/folders/folder-browser";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, RotateCcw, UploadCloud } from "lucide-react";
+import { Folder, Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
