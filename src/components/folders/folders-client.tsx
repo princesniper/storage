@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FolderBrowser from "@/components/folders/folder-browser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Folder, FolderUp, Loader2, RotateCcw, UploadCloud } from "lucide-react";
+import { Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -224,27 +224,6 @@ export default function FoldersClient() {
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
 
-  async function createFolder() {
-    const name = window.prompt("New folder name");
-    if (!name?.trim()) return;
-    try {
-      const response = await fetch("/api/folders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), parentId: parentFolderId }),
-      });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.detail || json.error || "Failed to create folder");
-      await qc.invalidateQueries({ queryKey: ["folders"] });
-      window.location.assign(parentFolderId ? `/folders?folderId=${parentFolderId}` : "/folders");
-    } catch (error) {
-      toast({
-        title: "Folder creation failed",
-        description: error instanceof Error ? error.message : "Could not create folder.",
-        variant: "destructive",
-      });
-    }
-  }
   const currentItem = useMemo(() => items.find((i) => i.status === "uploading" || i.status === "compressing") ?? null, [items]);
 
   useEffect(() => () => disposeCompressionResources(), []);
@@ -519,19 +498,6 @@ export default function FoldersClient() {
   return (
     <div className="space-y-6">
       <FolderBrowser />
-      {!uploadMode && (
-        <div className="mx-6 mb-6 flex flex-wrap items-center gap-2">
-          <Button onClick={createFolder}>
-            <Folder className="mr-2 h-4 w-4" />New Folder
-          </Button>
-          <Button variant="outline" onClick={() => router.push(parentFolderId ? `/folders?upload=1&parentFolderId=${parentFolderId}` : "/folders?upload=1")}>
-            <FolderUp className="mr-2 h-4 w-4" />Upload Folder
-          </Button>
-          <Button variant="outline" onClick={() => router.push(parentFolderId ? `/upload?folderId=${parentFolderId}` : "/upload")}>
-            <FileUp className="mr-2 h-4 w-4" />Upload Files
-          </Button>
-        </div>
-      )}
       {uploadMode && (
         <section className="mx-6 mb-6 space-y-5 rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
