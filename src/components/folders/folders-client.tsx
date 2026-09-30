@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/format";
 import { useToast } from "@/hooks/use-toast";
 import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
+import { compressionPolicy } from "@/lib/compression/compression-policy";
 import type { CompressionMode } from "@/lib/compression/types";
 
 type FolderItem = {
@@ -449,6 +450,12 @@ export default function FoldersClient() {
         if (abortRef.current) return;
 
         if (!item.file.type.startsWith("image/")) {
+          await upload(() => uploadOne({ ...item, status: "pending" }, resolved));
+          return;
+        }
+
+        const shouldCompress = compressionPolicy({ mode: compressionMode, size: item.file.size }).shouldAttempt;
+        if (!shouldCompress) {
           await upload(() => uploadOne({ ...item, status: "pending" }, resolved));
           return;
         }

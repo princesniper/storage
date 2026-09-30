@@ -16,6 +16,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { formatBytes, isVideoMime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
+import { compressionPolicy } from "@/lib/compression/compression-policy";
 import type { CompressionMode, CompressionState } from "@/lib/compression/types";
 
 interface ChannelRow { id: number; name: string; status: string; }
@@ -288,6 +289,12 @@ export default function UploadClient() {
 
       const isImage = item.file.type.startsWith("image/");
       if (!isImage) {
+        await upload(() => uploadOne({ ...item, status: "pending" }, channelId));
+        return;
+      }
+
+      const shouldCompress = compressionPolicy({ mode: compressionMode, size: item.file.size }).shouldAttempt;
+      if (!shouldCompress) {
         await upload(() => uploadOne({ ...item, status: "pending" }, channelId));
         return;
       }
