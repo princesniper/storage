@@ -223,6 +223,28 @@ export default function FoldersClient() {
   const parentFolderId = Number(searchParams.get("parentFolderId")) || null;
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
+
+  async function createFolder() {
+    const name = window.prompt("New folder name");
+    if (!name?.trim()) return;
+    try {
+      const response = await fetch("/api/folders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), parentId: parentFolderId }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.detail || json.error || "Failed to create folder");
+      await qc.invalidateQueries({ queryKey: ["folders"] });
+      window.location.assign(parentFolderId ? `/folders?folderId=${parentFolderId}` : "/folders");
+    } catch (error) {
+      toast({
+        title: "Folder creation failed",
+        description: error instanceof Error ? error.message : "Could not create folder.",
+        variant: "destructive",
+      });
+    }
+  }
   const currentItem = useMemo(() => items.find((i) => i.status === "uploading" || i.status === "compressing") ?? null, [items]);
 
   useEffect(() => () => disposeCompressionResources(), []);
@@ -440,46 +462,51 @@ export default function FoldersClient() {
       }
       if (!resolved[rootName]) throw new Error("Root folder was not resolved");
       const upload = createLimiter(CONCURRENCY);
-      const compression = createLimiter(COMPRESSION_CONCURRENCY);
-      const videoCompression = createLimiter(1);
-      const uploadPromises: Promise<void>[] = [];
+      const imageCompression = createLimiter(COMPRESSION_CONCURRENCY);
 
-      await Promise.all(queue.map((item) => compression(async () => {
+      // Videos and non-images go straight to upload. Only images enter the
+      // browser compression queue, and each image starts uploading immediately
+      // after its own compression completes.
+      await Promise.all(queue.map(async (item) => {
         if (abortRef.current) return;
-        patch(item.id, {
-          status: "compressing",
-          compressionProgress: 0,
-          compressionDetail: "Preparing local compression",
-        });
 
-        const compressTask = () => compressFile(item.file, compressionMode, (state) => {
+        if (!item.file.type.startsWith("image/")) {
+          await upload(() => uploadOne({ ...item, status: "pending" }, resolved));
+          return;
+        }
+
+        await imageCompression(async () => {
           if (abortRef.current) return;
           patch(item.id, {
             status: "compressing",
-            compressionProgress: state.progress ?? 0,
-            compressionDetail: state.detail,
+            compressionProgress: 0,
+            compressionDetail: "Preparing local image compression",
           });
+
+          const result = await compressFile(item.file, compressionMode, (state) => {
+            if (abortRef.current) return;
+            patch(item.id, {
+              status: "compressing",
+              compressionProgress: state.progress,
+              compressionDetail: state.detail,
+            });
+          });
+
+          if (abortRef.current) return;
+
+          patch(item.id, {
+            file: result.file,
+            compressionProgress: 100,
+            compressionDetail: result.compressed ? "Compressed locally" : "Uploading original",
+          });
+
+          await upload(() => uploadOne({
+            ...item,
+            file: result.file,
+            status: "pending",
+          }, resolved));
         });
-
-        const result = item.file.type.startsWith("video/")
-          ? await videoCompression(compressTask)
-          : await compressTask();
-
-        if (abortRef.current) return;
-
-        patch(item.id, {
-          file: result.file,
-          compressionProgress: 100,
-          compressionDetail: result.compressed ? "Compressed locally" : "Uploading original",
-        });
-
-        uploadPromises.push(upload(() => uploadOne({
-          ...item,
-          file: result.file,
-          status: "pending",
-        }, resolved)));
-      })));
-      await Promise.all(uploadPromises);
+      }));
       await qc.invalidateQueries({ queryKey: ["folders"] });
     } catch (error) {
       toast({ title: "Folder upload stopped", description: error instanceof Error ? error.message : "Unexpected error", variant: "destructive" });
@@ -492,6 +519,19 @@ export default function FoldersClient() {
   return (
     <div className="space-y-6">
       <FolderBrowser />
+      {!uploadMode && (
+        <div className="mx-6 mb-6 flex flex-wrap items-center gap-2">
+          <Button onClick={createFolder}>
+            <Folder className="mr-2 h-4 w-4" />New Folder
+          </Button>
+          <Button variant="outline" onClick={() => router.push(parentFolderId ? `/folders?upload=1&parentFolderId=${parentFolderId}` : "/folders?upload=1")}>
+            <FolderUp className="mr-2 h-4 w-4" />Upload Folder
+          </Button>
+          <Button variant="outline" onClick={() => router.push(parentFolderId ? `/upload?folderId=${parentFolderId}` : "/upload")}>
+            <FileUp className="mr-2 h-4 w-4" />Upload Files
+          </Button>
+        </div>
+      )}
       {uploadMode && (
         <section className="mx-6 mb-6 space-y-5 rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -519,7 +559,7 @@ export default function FoldersClient() {
               <option value="balanced">Balanced</option>
               <option value="auto">Auto</option>
             </select>
-            <p className="text-xs text-muted-foreground">Runs locally in your browser. Files over 800 MB upload as original.</p>
+            <p className="text-xs text-muted-foreground">Image compression runs locally in your browser. Videos are always uploaded original.</p>
           </div>
 
           <div onClick={() => inputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} className={cn("rounded-2xl border-2 border-dashed p-10 text-center transition-colors cursor-pointer", dragOver ? "border-primary bg-primary/5" : "border-border hover:bg-muted/30")}>
