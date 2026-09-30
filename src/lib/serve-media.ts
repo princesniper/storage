@@ -64,6 +64,8 @@ export function cacheKeyFor(sequenceNumber: number): string {
 export async function respondWithFileBytes(file: ServableFile, req: Request): Promise<Response> {
   const publicId = cacheKeyFor(file.sequenceNumber);
   const isVideo = file.mimeType.startsWith("video/");
+  const isAudio = file.mimeType.startsWith("audio/");
+  const supportsRange = isVideo || isAudio;
   const rangeHeader = req.headers.get("range");
 
   // Cache hit?
@@ -93,7 +95,7 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
   try {
     // Video requests normally arrive with HTTP Range. Fetch only that range
     // from Telegram instead of downloading the entire video before responding.
-    if (isVideo && rangeHeader) {
+    if (supportsRange && rangeHeader) {
       const parsed = parseRange(rangeHeader, Number(file.size));
       if (!parsed) {
         return new Response(JSON.stringify({ error: "INVALID_RANGE" }), {
@@ -218,11 +220,11 @@ function serveBytes(
     "X-Content-Type-Options": "nosniff",
   };
   if (etag) baseHeaders["ETag"] = `"${etag}"`;
-  if (isVideo) baseHeaders["Accept-Ranges"] = "bytes";
+  if (supportsRange) baseHeaders["Accept-Ranges"] = "bytes";
   // Allow embedding from any origin so GrowPlants can <img>/<video src=...>
   baseHeaders["Access-Control-Allow-Origin"] = "*";
 
-  if (!isVideo || !rangeHeader) {
+  if (!supportsRange || !rangeHeader) {
     return new Response(toStream(buf), {
       status: 200,
       headers: { ...baseHeaders, "Content-Length": String(size) },
