@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FolderBrowser from "@/components/folders/folder-browser";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -189,7 +189,6 @@ function FolderTree({
 export default function FoldersClient() {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
-  const qc = useQueryClient();
   const { toast } = useToast();
   const [dragOver, setDragOver] = useState(false);
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -224,27 +223,6 @@ export default function FoldersClient() {
   const stats = useMemo(() => progressFor(items), [items]);
   const failedItems = useMemo(() => items.filter((i) => i.status === "failed"), [items]);
 
-  async function createFolder() {
-    const name = window.prompt("New folder name");
-    if (!name?.trim()) return;
-    try {
-      const response = await fetch("/api/folders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), parentId: parentFolderId }),
-      });
-      const json = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(json.detail || json.error || "Failed to create folder");
-      await qc.invalidateQueries({ queryKey: ["folders"] });
-      window.location.assign(parentFolderId ? `/folders?folderId=${parentFolderId}` : "/folders");
-    } catch (error) {
-      toast({
-        title: "Folder creation failed",
-        description: error instanceof Error ? error.message : "Could not create folder.",
-        variant: "destructive",
-      });
-    }
-  }
   const currentItem = useMemo(() => items.find((i) => i.status === "uploading" || i.status === "compressing") ?? null, [items]);
 
   useEffect(() => () => disposeCompressionResources(), []);
