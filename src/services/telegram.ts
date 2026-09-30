@@ -540,14 +540,15 @@ class TelegramServiceImpl {
     const requestSize = 512 * 1024;
     const rangeLength = end - start + 1;
     const offset = doc.size.subtract(doc.size).add(start);
-    const chunkLimit = Math.ceil((rangeLength + requestSize - 1) / requestSize) + 1;
     const chunks: Buffer[] = [];
     let remaining = rangeLength;
 
+    // GramJS `limit` is the total byte count, not a chunk count.
+    // A chunk-count limit truncates Range responses and breaks HTML5 video playback.
     for await (const chunk of this.client.iterDownload({
       file: location,
       offset,
-      limit: chunkLimit,
+      limit: rangeLength,
       requestSize,
       fileSize: doc.size,
     })) {
