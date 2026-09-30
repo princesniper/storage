@@ -1,6 +1,5 @@
 import type { CompressionMode } from "./types";
 
-export const COMPRESSION_LIMIT_BYTES = 800 * 1024 * 1024;
 const AUTO_MIN_SAVINGS_RATIO = 0.05;
 const AUTO_MIN_SIZE_BYTES = 1 * 1024 * 1024;
 
@@ -19,8 +18,8 @@ export function compressionPolicy({ mode, size }: CompressionPolicyInput): Compr
   if (mode === "original") {
     return { eligible: false, shouldAttempt: false, reason: "original-mode" };
   }
-  if (size > COMPRESSION_LIMIT_BYTES) {
-    return { eligible: false, shouldAttempt: false, reason: "over-800mb" };
+  if (!Number.isFinite(size) || size <= 0) {
+    return { eligible: false, shouldAttempt: false, reason: "invalid-size" };
   }
   if (mode === "balanced") {
     return { eligible: true, shouldAttempt: true };

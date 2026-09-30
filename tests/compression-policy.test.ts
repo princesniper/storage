@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { COMPRESSION_LIMIT_BYTES, compressionPolicy, isWorthwhile, shouldUseCompressedOutput } from "../src/lib/compression/compression-policy.ts";
+import { compressionPolicy, isWorthwhile, shouldUseCompressedOutput } from "../src/lib/compression/compression-policy.ts";
 
 test("original mode never compresses", () => {
   assert.deepEqual(compressionPolicy({ mode: "original", size: 1 }), {
@@ -10,17 +10,16 @@ test("original mode never compresses", () => {
   });
 });
 
-test("balanced mode compresses files at or below 800 MB", () => {
-  const exact = compressionPolicy({ mode: "balanced", size: COMPRESSION_LIMIT_BYTES });
-  assert.equal(exact.eligible, true);
-  assert.equal(exact.shouldAttempt, true);
+test("balanced mode has no file-size ceiling", () => {
+  const result = compressionPolicy({ mode: "balanced", size: 2 * 1024 * 1024 * 1024 });
+  assert.equal(result.eligible, true);
+  assert.equal(result.shouldAttempt, true);
 });
 
-test("801 MB bypasses compression", () => {
-  const result = compressionPolicy({ mode: "auto", size: COMPRESSION_LIMIT_BYTES + 1 });
-  assert.equal(result.eligible, false);
-  assert.equal(result.shouldAttempt, false);
-  assert.equal(result.reason, "over-800mb");
+test("auto mode accepts large image files", () => {
+  const result = compressionPolicy({ mode: "auto", size: 2 * 1024 * 1024 * 1024 });
+  assert.equal(result.eligible, true);
+  assert.equal(result.shouldAttempt, true);
 });
 
 test("auto skips tiny files before compression", () => {
@@ -28,6 +27,11 @@ test("auto skips tiny files before compression", () => {
   assert.equal(result.eligible, true);
   assert.equal(result.shouldAttempt, false);
   assert.equal(result.reason, "auto-file-too-small");
+});
+
+test("invalid sizes are rejected", () => {
+  assert.equal(compressionPolicy({ mode: "balanced", size: 0 }).shouldAttempt, false);
+  assert.equal(compressionPolicy({ mode: "balanced", size: -1 }).shouldAttempt, false);
 });
 
 test("balanced accepts any valid size reduction", () => {
