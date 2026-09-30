@@ -27,7 +27,6 @@ import {
   TriangleAlert,
   WifiOff,
   FileWarning,
-  CircleX,
   Database,
   Globe,
   ListOrdered,
@@ -48,7 +47,6 @@ import { CopyButton } from "@/components/ui/copy-button";
 export default async function DashboardPage() {
   await getServerSession(authOptions);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   const [
     totalFiles,
@@ -61,7 +59,6 @@ export default async function DashboardPage() {
     // ── Phase C additions (read-only counts, same Prisma models) ──
     missingFiles,
     deletedFiles,
-    failedUploads24h,
     latestSequence,
     channels,
   ] = await Promise.all([
@@ -78,13 +75,6 @@ export default async function DashboardPage() {
     db.file.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
     db.file.count({ where: { status: "missing" } }),
     db.file.count({ where: { status: "deleted" } }),
-    db.uploadLog.count({
-      where: {
-        operation: "UPLOAD",
-        status: { not: "SUCCESS" },
-        createdAt: { gte: twentyFourHoursAgo },
-      },
-    }),
     db.file.aggregate({ _max: { sequenceNumber: true } }),
     db.storageChannel.findMany({
       select: { id: true, name: true, status: true, lastTestOk: true, lastTestedAt: true },
@@ -116,15 +106,6 @@ export default async function DashboardPage() {
       detail: "Storage is unavailable. Uploads and media serving may be degraded.",
       href: "/settings",
       action: "Open settings",
-    });
-  }
-  if (failedUploads24h > 0) {
-    issues.push({
-      icon: CircleX,
-      title: `${failedUploads24h.toLocaleString()} upload${failedUploads24h === 1 ? "" : "s"} failed in 24h`,
-      detail: "Review the audit log for error details, then retry the batch.",
-      href: "/audit",
-      action: "View audit log",
     });
   }
   if (missingFiles > 0) {
@@ -229,7 +210,7 @@ export default async function DashboardPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-medium">No action required</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Storage connected · no failed uploads in 24h · no missing files · all channel tests passing.
+                    Storage connected · no missing files · all channel tests passing.
                   </p>
                 </div>
               </CardContent>
