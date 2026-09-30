@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import FolderBrowser from "@/components/folders/folder-browser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Folder, FolderUp, Loader2, RotateCcw, UploadCloud } from "lucide-react";
+import { Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -519,19 +519,6 @@ export default function FoldersClient() {
   return (
     <div className="space-y-6">
       <FolderBrowser />
-      {!uploadMode && (
-        <div className="mx-6 mb-6 flex flex-wrap items-center gap-2">
-          <Button onClick={createFolder}>
-            <Folder className="mr-2 h-4 w-4" />New Folder
-          </Button>
-          <Button variant="outline" onClick={() => router.push(parentFolderId ? `/folders?upload=1&parentFolderId=${parentFolderId}` : "/folders?upload=1")}>
-            <FolderUp className="mr-2 h-4 w-4" />Upload Folder
-          </Button>
-          <Button variant="outline" onClick={() => router.push(parentFolderId ? `/upload?folderId=${parentFolderId}` : "/upload")}>
-            <FileUp className="mr-2 h-4 w-4" />Upload Files
-          </Button>
-        </div>
-      )}
       {uploadMode && (
         <section className="mx-6 mb-6 space-y-5 rounded-2xl border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
