@@ -51,3 +51,11 @@ test("larger or invalid output is never worthwhile", () => {
   assert.equal(isWorthwhile(1000, 1200), false);
   assert.equal(isWorthwhile(1000, 0), false);
 });
+
+
+test("801 MB bypasses image compression", () => {
+  const result = compressionPolicy({ mode: "auto", size: 800 * 1024 * 1024 + 1 });
+  assert.equal(result.eligible, false);
+  assert.equal(result.shouldAttempt, false);
+  assert.equal(result.reason, "over-800mb");
+});
