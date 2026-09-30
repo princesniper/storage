@@ -23,6 +23,8 @@ import { createHash } from "crypto";
 
 export const NEGATIVE_TTL = 60; // seconds — short cache for missing files
 export const PUBLIC_TTL = 86400; // 24h public cache
+// Bound each Telegram-backed video range request for responsive playback.
+export const MAX_VIDEO_RANGE_BYTES = 4 * 1024 * 1024;
 
 export interface ServableFile {
   id: number;
@@ -103,12 +105,13 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
           },
         });
       }
+      const requestedEnd = Math.min(parsed.end, parsed.start + MAX_VIDEO_RANGE_BYTES - 1);
       const result = await telegramService.downloadFileRange(
         file.storageChannel.telegramChannelId,
         file.telegramMessageId,
         file.telegramFileReference,
         parsed.start,
-        parsed.end
+        requestedEnd
       );
       bytes = result.bytes;
       refreshedReferenceB64 = result.refreshedReferenceB64;
