@@ -40,7 +40,7 @@ function FileCard({file,onOpen}:{file:FileRow;onOpen:()=>void}){
     <button onClick={onOpen} className="block w-full text-left"><div className="aspect-square bg-muted/30">
       {isImage?<img src={file.publicUrl} alt={file.originalName} loading="lazy" className="h-full w-full object-cover"/>:isVideo?<div className="relative h-full w-full"><VideoThumbnail src={file.publicUrl} alt={file.originalName} className="h-full w-full object-cover" fallback={<div className="flex h-full w-full items-center justify-center"><Video className="h-12 w-12 text-muted-foreground/50"/></div>}/><span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-2 py-1 text-[10px] text-white"><Play className="mr-1 inline h-3 w-3 fill-current"/>VIDEO</span></div>:isAudio?<div className="flex h-full items-center justify-center text-muted-foreground"><Music className="h-12 w-12"/></div>:<div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">{renderFileIcon(file.mimeType,"h-12 w-12")}<span className="max-w-[80%] truncate text-xs">{file.mimeType.split("/").pop()}</span></div>}
     </div><div className="p-3"><div className="truncate text-sm font-medium">{file.originalName}</div><div className="mt-1 text-xs text-muted-foreground">{formatBytes(file.size)} · {formatDate(file.createdAt)}</div></div></button>
-    <div className="flex justify-end border-t px-2 py-1"><FolderActions itemType="file" itemId={file.id} itemName={file.originalName}/></div>
+    <div className="flex justify-end border-t px-2 py-1"><FolderActions itemType="file" itemId={file.id} itemName={file.originalName} fileUrl={file.publicUrl}/></div>
   </div>;
 }
 
