@@ -24,10 +24,7 @@ import {
   CheckCircle2,
   Film,
   CalendarDays,
-  TriangleAlert,
-  WifiOff,
-  FileWarning,
-  Database,
+        Database,
   Globe,
   ListOrdered,
   LayoutGrid,
@@ -92,46 +89,10 @@ export default async function DashboardPage() {
   const inactiveChannels = channels.filter((c) => c.status !== "active");
   const latestSeq = latestSequence._max.sequenceNumber ?? null;
 
-  const issues: {
-    icon: React.ElementType;
-    title: string;
-    detail: string;
-    href: string;
-    action: string;
-  }[] = [];
-  if (!storageConnected) {
-    issues.push({
-      icon: WifiOff,
-      title: "Storage disconnected",
-      detail: "Storage is unavailable. Uploads and media serving may be degraded.",
-      href: "/settings",
-      action: "Open settings",
-    });
-  }
-  if (missingFiles > 0) {
-    issues.push({
-      icon: FileWarning,
-      title: `${missingFiles.toLocaleString()} file${missingFiles === 1 ? "" : "s"} missing from storage`,
-      detail: "Messages were deleted or became unreachable. Public URLs return 404.",
-      href: "/files",
-      action: "Open library",
-    });
-  }
-  if (failedTestChannels.length > 0) {
-    issues.push({
-      icon: TriangleAlert,
-      title: `${failedTestChannels.length} channel${failedTestChannels.length === 1 ? "" : "s"} failed last test`,
-      detail: failedTestChannels.map((c) => c.name).slice(0, 3).join(", "),
-      href: "/channels",
-      action: "Check channels",
-    });
-  }
 
-  const statusLine = !storageConnected
-    ? "Infrastructure attention required — see action items below."
-    : issues.length > 0
-      ? `${issues.length} operational issue${issues.length === 1 ? "" : "s"} need${issues.length === 1 ? "s" : ""} attention.`
-      : "Your media infrastructure is healthy and operational.";
+  const statusLine = storageConnected
+    ? "Your media infrastructure is healthy and operational."
+    : "Storage is currently disconnected; review the storage connection in Settings.";
 
   return (
     <DashboardShell>
