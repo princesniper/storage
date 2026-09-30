@@ -113,7 +113,8 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
         file.telegramMessageId,
         file.telegramFileReference,
         parsed.start,
-        requestedEnd
+        requestedEnd,
+        file.telegramAccessHash
       );
       bytes = result.bytes;
       refreshedReferenceB64 = result.refreshedReferenceB64;
@@ -142,7 +143,8 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
     const result = await telegramService.downloadFile(
       file.storageChannel.telegramChannelId,
       file.telegramMessageId,
-      file.telegramFileReference
+      file.telegramFileReference,
+      file.telegramAccessHash
     );
     bytes = result.bytes;
     refreshedReferenceB64 = result.refreshedReferenceB64;

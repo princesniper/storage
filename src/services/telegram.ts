@@ -326,6 +326,18 @@ class TelegramServiceImpl {
       throw new Error(`Could not resolve Telegram channel ${normalizedPeerId}: ${msg}. The connected Telegram account must be a member/admin of the channel, and the channel must be visible in its dialogs. Ensure the ID is correct and reconnect the account if needed.`);
     }
   }
+  /** Build a channel input peer directly from the access hash stored with the file.
+   * This avoids relying on GramJS's entity cache/dialogs for old files.
+   */
+  private inputPeerFromStoredChannel(peerId: string, accessHash: string) {
+    const match = peerId.trim().match(/^-100(\d+)$/);
+    if (!match || !accessHash.trim()) throw new Error(`Invalid stored Telegram channel reference: ${peerId}`);
+    return new Api.InputPeerChannel({
+      channelId: BigInt(match[1]),
+      accessHash: BigInt(accessHash.trim()),
+    });
+  }
+
   /** Generic "not connected" error that includes the boot failure, if any. */
   private notConnectedMessage(): string {
     return this.lastError
@@ -461,13 +473,14 @@ class TelegramServiceImpl {
   async downloadFile(
     peerId: string,
     messageId: number,
-    currentFileReferenceB64: string
+    currentFileReferenceB64: string,
+    accessHash?: string
   ): Promise<{ bytes: Buffer; refreshedReferenceB64?: string }> {
     await this.start();
     if (this.status !== "connected" || !this.client) {
       throw new Error(this.notConnectedMessage());
     }
-    const peer = await this.resolvePeer(peerId);
+    const peer = accessHash ? this.inputPeerFromStoredChannel(peerId, accessHash) : await this.resolvePeer(peerId);
 
     // Fetch the message fresh — gives us a working fileReference.
     // GramJS doesn't expose a clean "download from raw fileReference" API.
@@ -510,7 +523,8 @@ class TelegramServiceImpl {
     messageId: number,
     currentFileReferenceB64: string,
     start: number,
-    end: number
+    end: number,
+    accessHash?: string
   ): Promise<{ bytes: Buffer; refreshedReferenceB64?: string }> {
     await this.start();
     if (this.status !== "connected" || !this.client) {
@@ -520,7 +534,7 @@ class TelegramServiceImpl {
       throw new Error("INVALID_RANGE");
     }
 
-    const peer = await this.resolvePeer(peerId);
+    const peer = accessHash ? this.inputPeerFromStoredChannel(peerId, accessHash) : await this.resolvePeer(peerId);
     const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
     const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
     if (!fresh) throw new Error("Message not found");
