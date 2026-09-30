@@ -369,14 +369,19 @@ export function MediaLightbox({
                 <p className="mt-1 text-xs text-white/45">{file.mimeType}</p>
               </div>
               <audio
-                key={file.id}
+                key={`${file.id}-${file.publicUrl}`}
                 src={file.publicUrl}
                 controls
                 preload="metadata"
+                onLoadedMetadata={() => setMediaError(false)}
                 onCanPlay={() => setMediaError(false)}
                 onError={() => setMediaError(true)}
                 className="w-full"
-              />
+              >
+                <source src={file.publicUrl} type={file.mimeType} />
+                Your browser cannot play this audio format.{" "}
+                <a href={file.publicUrl} target="_blank" rel="noreferrer" className="underline">Open / download the file</a>.
+              </audio>
             </div>
           ) : (
             <img
