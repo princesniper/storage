@@ -485,7 +485,7 @@ export default function FoldersClient() {
           }, resolved));
         });
       }));
-      await qc.invalidateQueries({ queryKey: ["folders"] });
+      // Folder browser owns its own query and refreshes after navigation.
     } catch (error) {
       toast({ title: "Folder upload stopped", description: error instanceof Error ? error.message : "Unexpected error", variant: "destructive" });
     } finally {
