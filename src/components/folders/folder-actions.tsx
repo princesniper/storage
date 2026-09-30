@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Folder, Loader2, MoreVertical, Move, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Download, Folder, Loader2, MoreVertical, Move, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -217,12 +217,52 @@ export function NewFolderButton({ parentId }: { parentId: number | null }) {
   );
 }
 
-export function FolderActions({ itemType, itemId, itemName }: { itemType: ItemType; itemId: number; itemName: string }) {
+export function FolderActions({ itemType, itemId, itemName, fileUrl }: { itemType: ItemType; itemId: number; itemName: string; fileUrl?: string }) {
   const queryClient = useQueryClient();
   const [renameOpen, setRenameOpen] = useState(false);
   const [rename, setRename] = useState(itemName);
   const [moveOpen, setMoveOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  const downloadFile = async () => {
+    if (itemType !== "file" || !fileUrl || busy || deleteBusy) return;
+    setBusy(true);
+    try {
+      const response = await fetch(fileUrl);
+      if (!response.ok) throw new Error(`Download failed (${response.status})`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = itemName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : "Download failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteFile = async () => {
+    if (itemType !== "file" || deleteBusy || busy) return;
+    if (!window.confirm(`Delete "${itemName}"? This will remove the file from storage.`)) return;
+    setDeleteBusy(true);
+    try {
+      const response = await fetch(`/api/files/${itemId}`, { method: "DELETE" });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.detail || json.error || "Delete failed");
+      await queryClient.invalidateQueries({ queryKey: ["folder-browser"] });
+      await queryClient.invalidateQueries({ queryKey: ["folder-actions"] });
+    } catch (cause) {
+      window.alert(cause instanceof Error ? cause.message : "Delete failed");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   const renameFolder = async () => {
     const value = rename.trim();
@@ -256,6 +296,13 @@ export function FolderActions({ itemType, itemId, itemName }: { itemType: ItemTy
         <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
           {itemType === "folder" && <DropdownMenuItem onSelect={() => { setRename(itemName); setRenameOpen(true); }}><Pencil />Rename</DropdownMenuItem>}
           <DropdownMenuItem onSelect={() => setMoveOpen(true)}><Move />Move</DropdownMenuItem>
+          {itemType === "file" && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={busy || deleteBusy || !fileUrl} onSelect={downloadFile}><Download />Download</DropdownMenuItem>
+              <DropdownMenuItem disabled={busy || deleteBusy} onSelect={deleteFile} className="text-destructive focus:text-destructive"><Trash2 />Delete</DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
