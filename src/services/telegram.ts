@@ -632,8 +632,4 @@ class TelegramServiceImpl {
 const globalForTelegram = globalThis as unknown as { __telegramService?: TelegramServiceImpl };
 
 export const telegramService =
-  globalForTelegram.__telegramService ?? new TelegramServiceImpl();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForTelegram.__telegramService = telegramService;
-}
+  globalForTelegram.__telegramService ?? (globalForTelegram.__telegramService = new TelegramServiceImpl());
