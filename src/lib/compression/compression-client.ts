@@ -1,5 +1,4 @@
 import { compressionPolicy, shouldUseCompressedOutput } from "./compression-policy";
-import { compressVideo } from "./video-compression";
 import type { CompressionMode, CompressionProgress, CompressionResult } from "./types";
 
 type WorkerResult = { id: number; ok: boolean; blob?: Blob; error?: string };
@@ -51,9 +50,7 @@ const imageWorker = new ImageWorkerClient();
 
 function fileFromBlob(blob: Blob, original: File): File {
   const type = blob.type || original.type;
-  const name = type === "video/webm"
-    ? original.name.replace(/\.[^.]+$/, ".webm")
-    : original.name;
+  const name = original.name;
   return new File([blob], name, {
     type,
     lastModified: original.lastModified,
@@ -86,22 +83,18 @@ async function compressOne(
     };
   }
 
-  onProgress?.({ state: "analyzing", detail: "Checking browser compression support" });
+  onProgress?.({ state: "analyzing", detail: "Checking browser image compression support" });
 
   try {
-    let blob: Blob;
-    if (file.type.startsWith("image/")) {
-      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-        throw new Error("unsupported-image-format");
-      }
-      onProgress?.({ state: "compressing", progress: 0, detail: "Compressing image locally" });
-      blob = await compressImage(file);
-    } else if (file.type.startsWith("video/")) {
-      onProgress?.({ state: "compressing", progress: 0, detail: "Compressing video locally" });
-      blob = await compressVideo(file, (progress) => onProgress?.({ state: "compressing", progress }));
-    } else {
-      throw new Error("unsupported-file-type");
+    if (!file.type.startsWith("image/")) {
+      throw new Error("unsupported-image-format");
     }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      throw new Error("unsupported-image-format");
+    }
+
+    onProgress?.({ state: "compressing", detail: "Compressing image locally" });
+    const blob = await compressImage(file);
 
     const worthwhile = shouldUseCompressedOutput(mode, originalSize, blob.size);
     if (!worthwhile) {
@@ -121,7 +114,7 @@ async function compressOne(
     const output = fileFromBlob(blob, file);
     const savingsBytes = originalSize - output.size;
     const savingsRatio = savingsBytes / originalSize;
-    onProgress?.({ state: "ready", progress: 100, detail: "Compressed file ready" });
+    onProgress?.({ state: "ready", progress: 100, detail: "Compressed image ready" });
     return {
       originalFile: file,
       file: output,
@@ -147,7 +140,6 @@ async function compressOne(
     };
   }
 }
-
 export async function compressFile(
   file: File,
   mode: CompressionMode,
@@ -155,9 +147,7 @@ export async function compressFile(
 ): Promise<CompressionResult> {
   const result = await compressOne(file, mode, onProgress);
   if (!result.compressed) {
-    const detail = result.fallbackReason === "over-800mb"
-      ? "Large file — uploading original"
-      : "Uploading original" + (result.fallbackReason ? " (" + result.fallbackReason + ")" : "");
+    const detail = "Uploading original" + (result.fallbackReason ? " (" + result.fallbackReason + ")" : "");
     onProgress?.({ state: "fallback", progress: 100, detail });
   }
   return result;
