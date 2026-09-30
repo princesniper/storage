@@ -485,7 +485,6 @@ export default function FoldersClient() {
           }, resolved));
         });
       }));
-      await qc.invalidateQueries({ queryKey: ["folders"] });
     } catch (error) {
       toast({ title: "Folder upload stopped", description: error instanceof Error ? error.message : "Unexpected error", variant: "destructive" });
     } finally {
