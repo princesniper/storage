@@ -89,6 +89,45 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
   let bytes: Buffer;
   let refreshedReferenceB64: string | undefined;
   try {
+    // Video requests normally arrive with HTTP Range. Fetch only that range
+    // from Telegram instead of downloading the entire video before responding.
+    if (isVideo && rangeHeader) {
+      const parsed = parseRange(rangeHeader, Number(file.size));
+      if (!parsed) {
+        return new Response(JSON.stringify({ error: "INVALID_RANGE" }), {
+          status: 416,
+          headers: {
+            "Content-Type": "application/json",
+            "Content-Range": `bytes */${Number(file.size)}`,
+            "Accept-Ranges": "bytes",
+          },
+        });
+      }
+      const result = await telegramService.downloadFileRange(
+        file.storageChannel.telegramChannelId,
+        file.telegramMessageId,
+        file.telegramFileReference,
+        parsed.start,
+        parsed.end
+      );
+      bytes = result.bytes;
+      refreshedReferenceB64 = result.refreshedReferenceB64;
+      if (refreshedReferenceB64 && refreshedReferenceB64 !== file.telegramFileReference) {
+        await db.file.update({
+          where: { id: file.id },
+          data: { telegramFileReference: refreshedReferenceB64 },
+        });
+      }
+      return serveBytes(
+        bytes,
+        file.mimeType,
+        Number(file.size),
+        file.sha256 ?? undefined,
+        true,
+        rangeHeader
+      );
+    }
+
     const result = await telegramService.downloadFile(
       file.storageChannel.telegramChannelId,
       file.telegramMessageId,
@@ -170,6 +209,7 @@ function serveBytes(
     "X-Content-Type-Options": "nosniff",
   };
   if (etag) baseHeaders["ETag"] = `"${etag}"`;
+  if (isVideo) baseHeaders["Accept-Ranges"] = "bytes";
   // Allow embedding from any origin so GrowPlants can <img>/<video src=...>
   baseHeaders["Access-Control-Allow-Origin"] = "*";
 
