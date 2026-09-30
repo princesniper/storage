@@ -491,6 +491,63 @@ class TelegramServiceImpl {
   }
 
   /**
+   * Download only a byte range from a Telegram document. This is used by
+   * public video Range requests so a large video does not have to be fully
+   * downloaded from Telegram before the browser receives its first bytes.
+   */
+  async downloadFileRange(
+    peerId: string,
+    messageId: number,
+    currentFileReferenceB64: string,
+    start: number,
+    end: number
+  ): Promise<{ bytes: Buffer; refreshedReferenceB64?: string }> {
+    await this.start();
+    if (this.status !== "connected" || !this.client) {
+      throw new Error(this.notConnectedMessage());
+    }
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) {
+      throw new Error("INVALID_RANGE");
+    }
+
+    const peer = await this.resolvePeer(peerId);
+    const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
+    const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
+    if (!fresh) throw new Error("Message not found");
+
+    const media = fresh.media as
+      | (Api.MessageMediaDocument & {
+          document?: Api.Document & {
+            id: { toString(): string };
+            accessHash: { toString(): string };
+            fileReference: Buffer;
+          };
+        })
+      | undefined;
+    const doc = media?.document;
+    if (!doc) throw new Error("Message has no media document");
+
+    const newRef = doc.fileReference.toString("base64");
+    const refreshed = newRef !== currentFileReferenceB64;
+    const location = new Api.InputDocumentFileLocation({
+      id: doc.id,
+      accessHash: doc.accessHash,
+      fileReference: doc.fileReference,
+      thumbSize: "",
+    });
+    const bytes = await this.client.downloadFile(location, {
+      start,
+      end,
+      fileSize: Number(doc.size),
+    });
+    if (!bytes || typeof bytes === "string") throw new Error("download returned empty");
+    return {
+      bytes: Buffer.from(bytes),
+      refreshedReferenceB64: refreshed ? newRef : undefined,
+    };
+  }
+
+  /**
    * Delete a message in a channel.
    */
   async deleteMessage(peerId: string, messageId: number): Promise<void> {
