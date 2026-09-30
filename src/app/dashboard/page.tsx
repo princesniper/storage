@@ -198,52 +198,6 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        {/* ─── 3. Actionable Issues (Tier 1 only when action is needed) ─── */}
-        <section aria-label="Action required">
-          <SectionLabel>Action Required</SectionLabel>
-          {issues.length === 0 ? (
-            <Card tier="informational" className="animate-page-enter">
-              <CardContent className="py-5 flex items-center gap-3">
-                <span className="size-9 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="size-4 text-emerald-400" aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">No action required</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Storage connected · no missing files · all channel tests passing.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {issues.map((issue, i) => (
-                <Card
-                  key={issue.title}
-                  tier="actionable"
-                  className="animate-page-enter"
-                  style={{ "--enter-delay": `${Math.min(i, 4) * 40}ms` } as React.CSSProperties}
-                >
-                  <CardContent className="py-5 flex items-start gap-3">
-                    <span className="size-9 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
-                      <issue.icon className="size-4 text-red-400" aria-hidden />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold">{issue.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5 break-words">{issue.detail}</p>
-                      <Button size="sm" variant="outline" className="mt-3" asChild>
-                        <a href={issue.href}>
-                          {issue.action} <ArrowRight className="size-3.5 ml-1" aria-hidden />
-                        </a>
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* ─── 4. Storage Overview (Tier 2) ─── */}
         <section aria-label="Storage overview" className="space-y-4">
           <SectionLabel>Storage Overview</SectionLabel>
