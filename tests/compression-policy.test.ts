@@ -16,8 +16,8 @@ test("balanced mode has no file-size ceiling", () => {
   assert.equal(result.shouldAttempt, true);
 });
 
-test("auto mode has no 800 MB bypass", () => {
-  const result = compressionPolicy({ mode: "auto", size: 801 * 1024 * 1024 });
+test("auto mode accepts large image files", () => {
+  const result = compressionPolicy({ mode: "auto", size: 2 * 1024 * 1024 * 1024 });
   assert.equal(result.eligible, true);
   assert.equal(result.shouldAttempt, true);
 });
