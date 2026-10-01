@@ -17,7 +17,6 @@ import { formatBytes, formatDateTime } from "@/lib/format";
 import { FileStatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/hooks/use-toast";
 import type { MediaFile } from "./media-card";
-import { canonicalUrl as buildCanonicalUrl } from "@/lib/media-url";
 
 interface MediaInspectorProps {
   file: MediaFile;
@@ -41,10 +40,11 @@ export function MediaInspector({ file, onClose, onDeleted }: MediaInspectorProps
   const { toast } = useToast();
 
   const seq = file.sequenceNumber !== null ? String(file.sequenceNumber).padStart(6, "0") : "——";
-  // Reconstruct canonical URL if publicUrl doesn't already use the media origin
-  const canonicalUrl = file.sequenceNumber !== null
-    ? buildCanonicalUrl(file.sequenceNumber, file.mimeType)
-    : file.publicUrl;
+  // Public URLs are normalized by the server API. Do not import the server-only
+  // media URL resolver into this client component: it validates MEDIA_PUBLIC_URL
+  // at module evaluation time, but server environment variables are not exposed
+  // to browser bundles. Use the canonical URL supplied by the API.
+  const canonicalUrl = file.publicUrl;
 
   const handleCopy = async () => {
     try { await navigator.clipboard.writeText(canonicalUrl); } catch { /* noop */ }
