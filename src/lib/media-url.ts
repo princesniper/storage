@@ -33,6 +33,15 @@ const DEFAULT_MEDIA_ORIGIN = process.env.NODE_ENV === "production"
  */
 function resolveMediaOrigin(): string {
   const raw = (process.env.MEDIA_PUBLIC_URL ?? "").trim();
+  // A developer's .env can be loaded during production builds and contain a
+  // localhost origin. Never let that value leak into a production build.
+  // Railway injects the real MEDIA_PUBLIC_URL into the running service.
+  if (
+    process.env.NEXT_PHASE === "phase-production-build" &&
+    (!raw || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(?:\/|$)/i.test(raw))
+  ) {
+    return "https://growplants-media.up.railway.app";
+  }
   if (!raw) {
     if (process.env.NODE_ENV === "production") {
       throw new Error("MEDIA_PUBLIC_URL is required in production. Set it to the public application origin, e.g. https://growplants-media.up.railway.app; refusing to generate public media URLs with a local or implicit origin.");
