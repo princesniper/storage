@@ -129,6 +129,8 @@ model FolderShare {
   folderId       Int
   folder         Folder    @relation(fields: [folderId], references: [id], onDelete: Cascade)
   tokenHash      String    @unique
+  // Authenticated encryption of the original token so admins can reopen and copy an existing link.
+  tokenCiphertext String?
   createdAt      DateTime  @default(now())
   revokedAt      DateTime?
   lastAccessedAt DateTime?

@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
 import { compressionPolicy } from "@/lib/compression/compression-policy";
 import type { CompressionMode, CompressionState } from "@/lib/compression/types";
+import { resumableUpload } from "@/lib/client/resumable-upload";
 
 interface ChannelRow { id: number; name: string; status: string; }
 interface ChannelList { destinations: ChannelRow[]; storageStatus?: string; }
@@ -27,6 +28,7 @@ interface ChannelList { destinations: ChannelRow[]; storageStatus?: string; }
 const CONCURRENCY = 3;
 const MAX_RETRIES_ON_429 = 3;
 const RETRY_WAIT_S = 5;
+const RESUMABLE_UPLOAD_THRESHOLD = 20 * 1024 * 1024;
 const IMAGE_COMPRESSION_CONCURRENCY = 2;
 
 // Upload concurrency remains unchanged. Compression is a separate local preprocessing stage.
@@ -107,6 +109,7 @@ export default function UploadClient() {
   const [batchError, setBatchError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef(false);
+  const largeUploadControllersRef = useRef(new Map<number, AbortController>());
 
   const { data, isLoading: channelsLoading } = useQuery<ChannelList>({
     queryKey: ["channels-for-upload"],
@@ -179,76 +182,75 @@ export default function UploadClient() {
     setItems((prev) => prev.map((i) => (i.key === key ? { ...i, ...patch } : i)));
   };
 
-  function uploadOne(item: BatchItem, channel: string, attempt = 0): Promise<void> {
+  async function uploadOne(item: BatchItem, channel: string, attempt = 0): Promise<void> {
+    patchItem(item.key, { status: "uploading", progress: 0, retryNote: undefined, error: undefined });
+
+    if (item.file.size > RESUMABLE_UPLOAD_THRESHOLD) {
+      const controller = new AbortController();
+      largeUploadControllersRef.current.set(item.key, controller);
+      try {
+        const result = await resumableUpload({
+          file: item.file,
+          storageChannelId: Number(channel),
+          folderId: targetFolderId,
+          signal: controller.signal,
+          onProgress: (state) => {
+            patchItem(item.key, {
+              progress: state.progress,
+              retryNote: state.stage === "telegram" ? "Uploading to storage…" : undefined,
+            });
+          },
+        });
+        patchItem(item.key, {
+          status: "success",
+          progress: 100,
+          url: result.url,
+          channelName: activeChannels.find((c) => String(c.id) === channel)?.name ?? "",
+        });
+      } catch (error) {
+        const message = error instanceof DOMException && error.name === "AbortError"
+          ? "Upload cancelled."
+          : error instanceof Error ? error.message : "Upload failed";
+        patchItem(item.key, { status: "failed", error: message });
+      } finally {
+        largeUploadControllersRef.current.delete(item.key);
+      }
+      return;
+    }
+
     return new Promise((resolve) => {
-      patchItem(item.key, { status: "uploading", progress: 0, retryNote: undefined, error: undefined });
       const xhr = new XMLHttpRequest();
       const fd = new FormData();
       fd.append("file", item.file);
       fd.append("storageChannelId", channel);
       if (targetFolderId) fd.append("folderId", String(targetFolderId));
-
       xhr.upload.addEventListener("progress", (e) => {
-        if (e.lengthComputable && !abortRef.current) {
-          patchItem(item.key, { progress: Math.round((e.loaded / e.total) * 100) });
-        }
+        if (e.lengthComputable && !abortRef.current) patchItem(item.key, { progress: Math.round((e.loaded / e.total) * 100) });
       });
-
       xhr.addEventListener("load", () => {
-        if (abortRef.current) {
-          patchItem(item.key, { status: "failed", error: "Cancelled." });
-          resolve();
-          return;
-        }
+        if (abortRef.current) { patchItem(item.key, { status: "failed", error: "Cancelled." }); resolve(); return; }
         try {
           const json = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300 && json.success) {
-            patchItem(item.key, {
-              status: "success",
-              progress: 100,
-              url: json.file.url,
-              channelName: json.file.channel?.name ?? "",
-            });
+            patchItem(item.key, { status: "success", progress: 100, url: json.file.url, channelName: json.file.channel?.name ?? "" });
             resolve();
           } else if (xhr.status === 429 && attempt < MAX_RETRIES_ON_429) {
-            // Rate limited — countdown then retry
             let waited = 0;
             patchItem(item.key, { retryNote: `Rate limited, retrying in ${RETRY_WAIT_S}s` });
             const timer = setInterval(() => {
               waited += 1;
               const left = RETRY_WAIT_S - waited;
-              if (abortRef.current) {
-                clearInterval(timer);
-                patchItem(item.key, { status: "failed", error: "Cancelled.", retryNote: undefined });
-                resolve();
-                return;
-              }
-              if (left <= 0) {
-                clearInterval(timer);
-                uploadOne(item, channel, attempt + 1).then(resolve);
-              } else {
-                patchItem(item.key, { retryNote: `Rate limited, retrying in ${left}s` });
-              }
+              if (abortRef.current) { clearInterval(timer); patchItem(item.key, { status: "failed", error: "Cancelled.", retryNote: undefined }); resolve(); return; }
+              if (left <= 0) { clearInterval(timer); uploadOne(item, channel, attempt + 1).then(resolve); }
+              else patchItem(item.key, { retryNote: `Rate limited, retrying in ${left}s` });
             }, 1000);
           } else {
-            patchItem(item.key, { status: "failed", error: json.error ?? "Upload failed", httpStatus: xhr.status });
-            resolve();
+            patchItem(item.key, { status: "failed", error: json.error ?? "Upload failed", httpStatus: xhr.status }); resolve();
           }
-        } catch {
-          patchItem(item.key, { status: "failed", error: "INVALID_RESPONSE", httpStatus: xhr.status });
-          resolve();
-        }
+        } catch { patchItem(item.key, { status: "failed", error: "INVALID_RESPONSE", httpStatus: xhr.status }); resolve(); }
       });
-
-      xhr.addEventListener("error", () => {
-        patchItem(item.key, { status: "failed", error: "NETWORK_ERROR" });
-        resolve();
-      });
-      xhr.addEventListener("abort", () => {
-        patchItem(item.key, { status: "failed", error: "Upload cancelled." });
-        resolve();
-      });
-
+      xhr.addEventListener("error", () => { patchItem(item.key, { status: "failed", error: "NETWORK_ERROR" }); resolve(); });
+      xhr.addEventListener("abort", () => { patchItem(item.key, { status: "failed", error: "Upload cancelled." }); resolve(); });
       xhr.open("POST", "/api/files/upload");
       xhr.send(fd);
     });
@@ -347,6 +349,8 @@ export default function UploadClient() {
   };
   const cancelAll = () => {
     abortRef.current = true;
+    for (const controller of largeUploadControllersRef.current.values()) controller.abort();
+    largeUploadControllersRef.current.clear();
     setUploading(false);
   };
 
@@ -478,7 +482,7 @@ export default function UploadClient() {
             <span className="text-sm font-medium">
               {dragOver ? "Drop files to add them" : "Drop images or videos here or click to choose"}
             </span>
-            <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, MP4, WEBM, MOV · Images max 50 MB · Videos max 100 MB</span>
+            <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, MP4, WEBM, MOV · Images max 50 MB · Videos max 800 MB</span>
           </label>
         </div>
 

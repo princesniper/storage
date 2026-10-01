@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -9,6 +9,33 @@ export function createFolderShareToken(): string {
 
 export function hashFolderShareToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function shareEncryptionKey(): Buffer {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) throw new Error("AUTH_SECRET is required to protect share-link recovery data");
+  return createHash("sha256").update(secret, "utf8").digest();
+}
+
+export function encryptFolderShareToken(token: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", shareEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  return [iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), encrypted.toString("base64url")].join(".");
+}
+
+export function decryptFolderShareToken(value: string | null): string | null {
+  if (!value) return null;
+  try {
+    const [ivPart, tagPart, encryptedPart, extra] = value.split(".");
+    if (!ivPart || !tagPart || !encryptedPart || extra !== undefined) return null;
+    const decipher = createDecipheriv("aes-256-gcm", shareEncryptionKey(), Buffer.from(ivPart, "base64url"));
+    decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
+    const token = Buffer.concat([decipher.update(Buffer.from(encryptedPart, "base64url")), decipher.final()]).toString("utf8");
+    return TOKEN_PATTERN.test(token) ? token : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseLegacyFolderId(token: string): number | null {

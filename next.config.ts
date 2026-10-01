@@ -7,9 +7,10 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   experimental: {
-    // Folder/video uploads can be much larger than Next.js' default 10 MB
-    // middleware request-body buffer. Keep this aligned with the 1 GB video limit.
-    middlewareClientMaxBodySize: "1gb",
+    // Allow uploads up to the application video ceiling.
+    // Next.js 16 uses proxyClientMaxBodySize; the old middlewareClientMaxBodySize
+    // option is deprecated and must not be used for the upload proxy.
+    proxyClientMaxBodySize: "800mb",
   },
 };
 

@@ -7,6 +7,7 @@
  * - Session string is NEVER logged, NEVER returned to client.
  * - All operations run server-side only.
  */
+import bigInt from "big-integer";
 import { TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions";
 import { Api } from "telegram";
@@ -22,7 +23,7 @@ import { randomBytes } from "crypto";
 
 export type TelegramStatus = "disconnected" | "connecting" | "connected" | "pending_2fa" | "error";
 
-type UploadProgressState = { progress: number; stage: "telegram" | "complete" | "failed"; updatedAt: number };
+type UploadProgressState = { progress: number; stage: "telegram" | "complete" | "failed"; updatedAt: number; fileUrl?: string; error?: string };
 const globalForUploadProgress = globalThis as unknown as { __uploadProgress?: Map<string, UploadProgressState> };
 const uploadProgress = globalForUploadProgress.__uploadProgress ?? new Map<string, UploadProgressState>();
 globalForUploadProgress.__uploadProgress = uploadProgress;
@@ -43,6 +44,14 @@ export function getTelegramUploadProgress(id: string) {
 
 export function clearTelegramUploadProgress(id: string) {
   uploadProgress.delete(id);
+}
+
+export function setTelegramUploadResult(id: string, fileUrl: string) {
+  uploadProgress.set(id, { progress: 100, stage: "complete", updatedAt: Date.now(), fileUrl });
+}
+
+export function setTelegramUploadFailure(id: string, error: string) {
+  uploadProgress.set(id, { progress: 0, stage: "failed", updatedAt: Date.now(), error });
 }
 
 type Pending2FA = {
@@ -333,8 +342,8 @@ class TelegramServiceImpl {
     const match = peerId.trim().match(/^-100(\d+)$/);
     if (!match || !accessHash.trim()) throw new Error(`Invalid stored Telegram channel reference: ${peerId}`);
     return new Api.InputPeerChannel({
-      channelId: BigInt(match[1]),
-      accessHash: BigInt(accessHash.trim()),
+      channelId: bigInt(match[1]),
+      accessHash: bigInt(accessHash.trim()),
     });
   }
 
@@ -435,6 +444,57 @@ class TelegramServiceImpl {
         try { await fs.unlink(tempPath); } catch {}
       }
     }
+  }
+
+  /**
+   * Upload an already assembled file from disk without buffering the whole file in RAM.
+   * Used by resumable HTTP uploads so the Railway request can finish before Telegram transfer.
+   */
+  async uploadFileFromPath(
+    peerId: string,
+    filePath: string,
+    fileSize: number,
+    originalName: string,
+    onProgress?: (progress: number) => void,
+    uploadId?: string
+  ): Promise<{
+    messageId: number;
+    fileId: string;
+    accessHash: string;
+    fileReference: string;
+  }> {
+    await this.ensureConnectedClient();
+    if (!this.client) throw new Error(this.notConnectedMessage());
+    const peer = await this.resolvePeer(peerId);
+    const telegramFile = new CustomFile(originalName, fileSize, filePath);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const sent = await this.client.sendFile(peer, {
+          file: telegramFile,
+          progressCallback: (progress) => {
+            onProgress?.(progress);
+            if (uploadId) setTelegramUploadProgress(uploadId, Math.round(progress * 100), "telegram");
+          },
+          caption: originalName,
+          forceDocument: true,
+          fileSize,
+        });
+        return this.extractMessageRef(sent);
+      } catch (err) {
+        const waitSeconds = this.getFloodWaitSeconds(err);
+        if (waitSeconds != null && attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+          continue;
+        }
+        if (attempt === 0 && this.client && !this.client.connected) {
+          await this.ensureConnectedClient(true);
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Telegram upload failed after retries");
   }
 
   /**

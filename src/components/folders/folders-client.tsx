@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
 import { compressionPolicy } from "@/lib/compression/compression-policy";
 import type { CompressionMode } from "@/lib/compression/types";
+import { resumableUpload } from "@/lib/client/resumable-upload";
 
 type FolderItem = {
   id: number;
@@ -50,6 +51,7 @@ type DirEntry = FileSystemDirectoryEntry & { createReader: () => FileSystemDirec
 // uploads can trigger Telegram flood limits and turn a healthy upload into 502s.
 const CONCURRENCY = 1;
 const COMPRESSION_CONCURRENCY = 2;
+const RESUMABLE_UPLOAD_THRESHOLD = 20 * 1024 * 1024;
 
 function createLimiter(concurrency: number) {
   let active = 0;
@@ -324,6 +326,46 @@ export default function FoldersClient() {
       }
       setCurrent(item.relativePath);
       patch(item.id, { status: "uploading", progress: 0, loadedBytes: 0, speedBps: 0, telegramProgress: 0, telegramSpeedBps: 0, stage: "browser", error: undefined });
+
+      if (item.file.size > RESUMABLE_UPLOAD_THRESHOLD) {
+        resumableUpload({
+          file: item.file,
+          storageChannelId: Number(channelId),
+          folderId,
+          relativePath: item.relativePath,
+          onProgress: (state) => {
+            patch(item.id, {
+              progress: state.progress,
+              loadedBytes: state.loadedBytes,
+              speedBps: state.speedBps,
+              telegramProgress: state.telegramProgress,
+              telegramSpeedBps: state.speedBps,
+              stage: state.stage === "complete" ? "complete" : state.stage,
+            });
+          },
+        })
+          .then((result) => {
+            patch(item.id, {
+              status: "success",
+              progress: 100,
+              loadedBytes: item.file.size,
+              speedBps: 0,
+              telegramProgress: 100,
+              telegramSpeedBps: 0,
+              stage: "complete",
+              url: result.url,
+            });
+          })
+          .catch((error) => {
+            patch(item.id, {
+              status: "failed",
+              error: error instanceof Error ? error.message : "UPLOAD_FAILED",
+            });
+          })
+          .finally(resolve);
+        return;
+      }
+
       const xhr = new XMLHttpRequest();
       const uploadId = crypto.randomUUID();
       let telegramTimer: number | null = null;

@@ -24,7 +24,7 @@ const envSchema = z.object({
   // V2: canonical file size limit (images). Defaults to 50; legacy MAX_IMAGE_SIZE_MB
   // acts as an alias when MAX_FILE_SIZE_MB is unset.
   MAX_FILE_SIZE_MB: z.string().optional(),
-  MAX_VIDEO_SIZE_MB: z.string().optional().transform((v) => (v ? Number(v) : 1024)),
+  MAX_VIDEO_SIZE_MB: z.string().optional().transform((v) => (v ? Math.min(Number(v), 800) : 800)),
   ALLOWED_MIME_TYPES: z.string().default(
     [
       "image/jpeg","image/png","image/webp","image/gif","image/svg+xml",
@@ -113,6 +113,7 @@ export function isAllowedDetectedMime(mime: string): boolean {
 }
 // V2: MAX_FILE_SIZE_MB is canonical (default 50). Legacy MAX_IMAGE_SIZE_MB
 // still works as a fallback alias when MAX_FILE_SIZE_MB is unset.
+// Videos are capped at 800 MB at the application boundary.
 function resolveMaxFileMb(): number {
   if (process.env.MAX_FILE_SIZE_MB && Number(process.env.MAX_FILE_SIZE_MB) > 0) {
     return Number(process.env.MAX_FILE_SIZE_MB);

@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GrowPlants Media — Private Media Infrastructure",
+  title: "GrowPlants Media — Cloud File Library",
   description:
-    "Private admin-controlled media storage system backed by Telegram. Stable sequential public URLs and asset delivery.",
+    "A private cloud media library to upload, organize, preview, and manage your files.",
   robots: { index: false, follow: false },
 };
 

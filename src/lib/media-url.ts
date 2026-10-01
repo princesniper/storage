@@ -8,12 +8,11 @@
  * - Extension is derived server-side from the stored MIME type.
  *
  * ORIGIN POLICY (critical):
- * The canonical public origin comes from MEDIA_PUBLIC_URL (normalized,
- * trailing slash stripped), defaulting to https://m.media-growplants.com
- * when unset. It is NEVER derived from the request URL, request host,
- * window.location, localhost, deployment hostname, or APP_URL.
- * Local dev still SERVES /images/[file] on localhost for route testing —
- * but every stored/shown/copied PUBLIC url always uses CANONICAL_MEDIA_ORIGIN.
+ * The public origin comes from MEDIA_PUBLIC_URL when configured.
+ * Local development falls back to http://localhost:3000.
+ * Production should set MEDIA_PUBLIC_URL to the public deployment origin,
+ * e.g. https://growplants-media.up.railway.app.
+ * It is NEVER derived from request URL, request host, window.location, or APP_URL.
  */
 
 /**
@@ -21,7 +20,7 @@
  * set. Same value in dev, staging and production unless the env override
  * below is configured (with a data migration, since stored URLs embed it).
  */
-const DEFAULT_MEDIA_ORIGIN = "https://m.media-growplants.com";
+const DEFAULT_MEDIA_ORIGIN = "http://localhost:3000";
 
 /**
  * Resolve the canonical public media origin.
