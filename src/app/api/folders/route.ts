@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
     include: {
       _count: { select: { children: true, files: true } },
-      files: { select: { size: true, createdAt: true, updatedAt: true } },
+      files: { where: { status: "active" }, select: { size: true, createdAt: true, updatedAt: true } },
     },
   });
 
@@ -54,7 +54,7 @@ export async function GET(req: Request) {
         select: {
           id: true,
           parentId: true,
-          files: { select: { size: true, createdAt: true, updatedAt: true } },
+          files: { where: { status: "active" }, select: { size: true, createdAt: true, updatedAt: true } },
           _count: { select: { children: true, files: true } },
           name: true,
           createdAt: true,
@@ -112,7 +112,7 @@ export async function GET(req: Request) {
         createdAt: folder.createdAt,
         updatedAt: folder.updatedAt,
         childFolderCount: folder._count.children,
-        fileCount: folder._count.files,
+        fileCount: folder.files.length,
         totalFileCount: total.files,
         totalFolderCount: total.folders,
         totalSize: total.size,

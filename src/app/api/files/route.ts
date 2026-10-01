@@ -91,10 +91,10 @@ export async function GET(req: Request) {
 
   const orderBy =
     q.sort === "name"
-      ? { originalName: order }
+      ? [{ originalName: order }, { id: order }]
       : q.sort === "size"
-        ? { size: order }
-        : { createdAt: order };
+        ? [{ size: order }, { id: order }]
+        : [{ createdAt: order }, { id: order }];
 
   const where: Record<string, unknown> = {};
   if (q.status !== "all") where.status = q.status;
@@ -148,6 +148,8 @@ export async function GET(req: Request) {
       if (Number.isNaN(d.getTime())) {
         return NextResponse.json({ error: "INVALID_TO_DATE" }, { status: 400 });
       }
+      // Date-only filters are inclusive of the entire selected calendar day.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(q.to)) d.setUTCHours(23, 59, 59, 999);
       createdFilter.lte = d;
     }
     if (
@@ -195,6 +197,7 @@ export async function GET(req: Request) {
       width: f.width,
       height: f.height,
       createdAt: f.createdAt,
+      updatedAt: f.updatedAt,
       storageChannel: f.storageChannel,
       folder: f.folder,
     })),

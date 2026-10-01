@@ -10,7 +10,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
   if (!access) return NextResponse.json({ error: "INVALID_SHARE_LINK" }, { status: 404 });
   const files = await db.file.findMany({
     where: { folderId: { in: [...access.folderIds] }, status: "active" },
-    select: { id: true, originalName: true, mimeType: true, size: true, sequenceNumber: true, createdAt: true, folderId: true },
+    select: { id: true, originalName: true, mimeType: true, size: true, sequenceNumber: true, createdAt: true, updatedAt: true, folderId: true },
     orderBy: { createdAt: "asc" },
   });
   const folders = await db.folder.findMany({ select: { id: true, name: true, parentId: true } });
@@ -39,6 +39,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
       url: `/api/shared/folders/${encodeURIComponent(token)}/files/${file.id}`,
       downloadUrl: `/api/shared/folders/${encodeURIComponent(token)}/files/${file.id}?download=1`,
       createdAt: file.createdAt,
+      lastModified: file.updatedAt,
     })),
   }, { headers: { "Cache-Control": "private, no-store" } });
 }
