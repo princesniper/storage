@@ -1,26 +1,23 @@
 /**
- * Canonical sequential media URLs: https://m.media-growplants.com/images/000001.jpg
+ * Canonical sequential media URLs use MEDIA_PUBLIC_URL, for example
+ * https://growplants-media.up.railway.app/images/000042.jpg.
+ * Sequence numbers are allocated server-side and never reused.
+ * The six-digit display width grows naturally for larger sequence values.
+ * Extensions are derived from the stored MIME type.
  *
- * - Sequence numbers are allocated server-side from MediaSequence
- *   (atomic auto-increment, never reused) — never trusted from clients.
- * - Zero-padded display width is 6 (000001…). If the counter ever exceeds
- *   999999, output gracefully grows (1000000) — no crash, no collision.
- * - Extension is derived server-side from the stored MIME type.
- *
- * ORIGIN POLICY (critical):
- * The public origin comes from MEDIA_PUBLIC_URL when configured.
- * Local development falls back to http://localhost:3000.
- * Production should set MEDIA_PUBLIC_URL to the public deployment origin,
- * e.g. https://growplants-media.up.railway.app.
- * It is NEVER derived from request URL, request host, window.location, or APP_URL.
+ * MEDIA_PUBLIC_URL is the source of truth. In production it must be a valid
+ * HTTPS URL; no request host, browser origin, APP_URL, or localhost fallback
+ * is allowed. Local development uses http://localhost:3000 when unset.
  */
 
 /**
- * Fixed default canonical media origin. Used when MEDIA_PUBLIC_URL is not
- * set. Same value in dev, staging and production unless the env override
- * below is configured (with a data migration, since stored URLs embed it).
+ * Environment-specific fallback: production uses the approved public media
+ * domain; local development uses localhost. Production validation still
+ * requires MEDIA_PUBLIC_URL to be explicitly configured.
  */
-const DEFAULT_MEDIA_ORIGIN = "http://localhost:3000";
+const DEFAULT_MEDIA_ORIGIN = process.env.NODE_ENV === "production"
+  ? "https://m.media-growplants.com"
+  : "http://localhost:3000";
 
 /**
  * Resolve the canonical public media origin.
@@ -36,15 +33,23 @@ const DEFAULT_MEDIA_ORIGIN = "http://localhost:3000";
  */
 function resolveMediaOrigin(): string {
   const raw = (process.env.MEDIA_PUBLIC_URL ?? "").trim();
-  if (!raw) return DEFAULT_MEDIA_ORIGIN;
+  if (!raw) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("MEDIA_PUBLIC_URL is required in production. Set it to the public application origin, e.g. https://growplants-media.up.railway.app; refusing to generate public media URLs with a local or implicit origin.");
+    }
+    return DEFAULT_MEDIA_ORIGIN;
+  }
   const normalized = raw.replace(/\/+$/, "");
   let parsed: URL;
   try {
     parsed = new URL(normalized);
   } catch {
     throw new Error(
-      `Invalid MEDIA_PUBLIC_URL=${JSON.stringify(raw)} — must be a full URL like https://m.media-growplants.com`
+      `Invalid MEDIA_PUBLIC_URL=${JSON.stringify(raw)} — must be a full public HTTPS URL like https://growplants-media.up.railway.app`
     );
+  }
+  if (process.env.NODE_ENV === "production" && parsed.protocol !== "https:") {
+    throw new Error("MEDIA_PUBLIC_URL must use HTTPS in production.");
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error(

@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { rateLimit } from "@/services/rate-limit";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
+import { canonicalUrl } from "@/lib/media-url";
 import { z } from "zod";
 
 const querySchema = z.object({
@@ -70,6 +71,8 @@ export async function GET(req: Request) {
           originalName: true,
           size: true,
           publicUrl: true,
+          sequenceNumber: true,
+          mimeType: true,
           storageChannel: { select: { name: true } },
         },
       }),
@@ -134,7 +137,7 @@ export async function GET(req: Request) {
         originalName: f.originalName,
         size: Number(f.size),
         channelName: f.storageChannel?.name ?? "—",
-        publicUrl: f.publicUrl,
+        publicUrl: f.sequenceNumber != null ? canonicalUrl(f.sequenceNumber, f.mimeType) : f.publicUrl,
       })),
     };
 
