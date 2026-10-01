@@ -540,7 +540,7 @@ class TelegramServiceImpl {
     if (this.status !== "connected" || !this.client) {
       throw new Error(this.notConnectedMessage());
     }
-    const peer = accessHash ? this.inputPeerFromStoredChannel(peerId, accessHash) : await this.resolvePeer(peerId);
+    const peer = await this.resolvePeer(peerId);
 
     // Fetch the message fresh — gives us a working fileReference.
     // GramJS doesn't expose a clean "download from raw fileReference" API.
@@ -594,7 +594,7 @@ class TelegramServiceImpl {
       throw new Error("INVALID_RANGE");
     }
 
-    const peer = accessHash ? this.inputPeerFromStoredChannel(peerId, accessHash) : await this.resolvePeer(peerId);
+    const peer = await this.resolvePeer(peerId);
     const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
     const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
     if (!fresh) throw new Error("Message not found");
