@@ -467,6 +467,18 @@ class TelegramServiceImpl {
     if (!this.client) throw new Error(this.notConnectedMessage());
     const peer = await this.resolvePeer(peerId);
     const telegramFile = new CustomFile(originalName, fileSize, filePath);
+    // GramJS defaults to one upload worker. Keep concurrency bounded to improve
+    // large-file throughput without using an unstable/high worker count.
+    const configuredWorkers = Number.parseInt(process.env.TELEGRAM_UPLOAD_WORKERS ?? "4", 10);
+    const workers = Number.isFinite(configuredWorkers)
+      ? Math.max(1, Math.min(8, configuredWorkers))
+      : 4;
+    const uploadStartedAt = Date.now();
+    logger.info("Telegram upload started", {
+      uploadId,
+      sizeBytes: fileSize,
+      workers,
+    });
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -479,6 +491,13 @@ class TelegramServiceImpl {
           caption: originalName,
           forceDocument: true,
           fileSize,
+          workers,
+        });
+        logger.info("Telegram upload completed", {
+          uploadId,
+          sizeBytes: fileSize,
+          durationMs: Date.now() - uploadStartedAt,
+          workers,
         });
         return this.extractMessageRef(sent);
       } catch (err) {

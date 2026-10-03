@@ -33,7 +33,6 @@ async function jsonResponse(response: Response) {
 
 export async function resumableUpload(options: Options): Promise<{ url: string }> {
   const { file, storageChannelId, folderId = null, relativePath = null, signal, onProgress } = options;
-  const startedAt = performance.now();
   let loadedBytes = 0;
 
   const session = await jsonResponse(await fetch("/api/uploads/session", {
@@ -55,6 +54,7 @@ export async function resumableUpload(options: Options): Promise<{ url: string }
     throw new Error("INVALID_UPLOAD_SESSION");
   }
 
+  const browserStartedAt = performance.now();
   for (let index = 0; index < totalChunks; index += 1) {
     if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
     const start = index * chunkSize;
@@ -85,7 +85,7 @@ export async function resumableUpload(options: Options): Promise<{ url: string }
 
     if (lastError) throw lastError;
     loadedBytes = end;
-    const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.1);
+    const elapsed = Math.max((performance.now() - browserStartedAt) / 1000, 0.1);
     onProgress?.({
       stage: "browser",
       progress: Math.min(50, Math.round((loadedBytes / file.size) * 50)),
@@ -93,13 +93,17 @@ export async function resumableUpload(options: Options): Promise<{ url: string }
       speedBps: loadedBytes / elapsed,
       telegramProgress: 0,
     });
-  }  await jsonResponse(await fetch("/api/uploads/complete", {
+  }
+
+  await jsonResponse(await fetch("/api/uploads/complete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ uploadId }),
     signal,
   }));
 
+  let previousTelegramBytes = 0;
+  let previousTelegramAt = 0;
   for (;;) {
     if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
     await sleep(750);
@@ -112,14 +116,19 @@ export async function resumableUpload(options: Options): Promise<{ url: string }
     if (!state) continue;
 
     const telegramProgress = Number(state.progress) || 0;
-    const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.1);
-    const totalProgressBytes = file.size * (telegramProgress / 100);
-    const totalSpeed = (file.size + totalProgressBytes) / elapsed;
+    const now = performance.now();
+    const telegramLoadedBytes = Math.round(file.size * (telegramProgress / 100));
+    const elapsedSinceSample = previousTelegramAt === 0 ? 0 : (now - previousTelegramAt) / 1000;
+    const speedBps = elapsedSinceSample > 0
+      ? Math.max(0, telegramLoadedBytes - previousTelegramBytes) / elapsedSinceSample
+      : 0;
+    previousTelegramBytes = telegramLoadedBytes;
+    previousTelegramAt = now;
     onProgress?.({
       stage: state.stage === "complete" ? "complete" : "telegram",
       progress: state.stage === "complete" ? 100 : Math.min(99, 50 + Math.round(telegramProgress * 0.5)),
-      loadedBytes: file.size,
-      speedBps: totalSpeed,
+      loadedBytes: state.stage === "complete" ? file.size : telegramLoadedBytes,
+      speedBps: state.stage === "complete" ? 0 : speedBps,
       telegramProgress,
     });
 
