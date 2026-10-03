@@ -114,9 +114,10 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
           <span
             className={cn(
               "absolute top-2 left-2 z-10 duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-opacity",
-              selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100",
+              file.status !== "active" && "cursor-not-allowed opacity-40"
             )}
-            onClick={(e) => { e.stopPropagation(); onSelect(); }}
+            onClick={(e) => { e.stopPropagation(); if (file.status === "active") onSelect(); }}
           >
             <span
               className={cn(
@@ -125,7 +126,10 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
               )}
               aria-label={`${selected ? "Deselect" : "Select"} ${file.originalName}`}
               role="checkbox"
+              tabIndex={file.status === "active" ? 0 : -1}
+              aria-disabled={file.status !== "active"}
               aria-checked={selected}
+              onKeyDown={(e) => { e.stopPropagation(); if (file.status === "active" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect(); } }}
             >
               {selected && <Check className="size-3 text-white" aria-hidden />}
             </span>

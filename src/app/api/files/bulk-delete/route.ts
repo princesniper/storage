@@ -17,7 +17,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const bodySchema = z.object({
-  ids: z.array(z.number().int().positive()).min(1).max(100),
+  ids: z.array(z.number().int().positive()).min(1).max(5000),
 });
 
 export async function POST(req: Request) {

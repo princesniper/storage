@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { MediaGrid } from "@/components/media/media-grid";
 import { MediaLightbox } from "@/components/media/media-lightbox";
 import type { MediaFile } from "@/components/media/media-card";
+import { BulkFileActions } from "@/components/files/bulk-file-actions";
 
 interface FileRow {
   id: number;
@@ -116,6 +118,12 @@ export default function FilesClient() {
   const setViewMode = (v: ViewMode) => setViewRaw(v);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
+  const [bulkMoveFolderId, setBulkMoveFolderId] = useState("root");
+  const [bulkMoveBusy, setBulkMoveBusy] = useState(false);
+  const [bulkDownloadBusy, setBulkDownloadBusy] = useState(false);
+  const [bulkFolders, setBulkFolders] = useState<{id:number;name:string;parentId:number|null}[]>([]);
+  const [bulkFoldersError, setBulkFoldersError] = useState("");
   const [pendingDelete, setPendingDelete] = useState<FileRow | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -207,7 +215,7 @@ export default function FilesClient() {
       return r.json() as Promise<{ deleted: number[]; failed: { id: number; error: string }[] }>;
     },
     onSuccess: (res) => {
-      setSelected(new Set());
+      setSelected(new Set(res.failed.map((item) => item.id)));
       setBulkConfirmOpen(false);
       qc.invalidateQueries({ queryKey: ["files"] });
       if (res.failed.length > 0) {
@@ -233,8 +241,10 @@ export default function FilesClient() {
   );
 
   const files = data?.files ?? [];
+
   const siblingIds = useMemo(() => files.map((f) => f.id), [files]);
   const allSelected = files.length > 0 && files.every((f) => selected.has(f.id));
+  const currentResultIds = files.map((f) => f.id);
 
   const toggleSelect = (id: number) => {
     setSelected((prev) => {
@@ -245,9 +255,17 @@ export default function FilesClient() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(files.map((f) => f.id)));
+  const toggleSelectAll = async () => {
+    if (allSelected) { setSelected((prev) => { const next = new Set(prev); currentResultIds.forEach((id) => next.delete(id)); return next; }); return; }
+    try {
+      const params = new URLSearchParams({ search, channelId, status, mimeType, minSize: minSizeKb ? String(Math.round(Number(minSizeKb) * 1024)) : "", maxSize: maxSizeKb ? String(Math.round(Number(maxSizeKb) * 1024)) : "", from, to });
+      for (const [key, value] of [...params.entries()]) if (!value || value === "all") params.delete(key);
+      const response = await fetch(`/api/files/selection-ids?${params}`);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.detail || json.error || "Could not select matching files.");
+      setSelected(new Set(json.ids as number[]));
+      toast({ title: `${json.ids.length} files selected`, description: "Selection includes matching results across all pages." });
+    } catch (cause) { toast({ title: "Select all failed", description: cause instanceof Error ? cause.message : "Could not select matching files.", variant: "destructive" }); }
   };
 
   const openDetail = (id: number) => {
@@ -260,6 +278,7 @@ export default function FilesClient() {
   const hasActiveFilters = mimeType !== "all" || minSizeKb || maxSizeKb || from || to;
 
   const clearExtraFilters = () => {
+    setSelected(new Set());
     setMimeType("all");
     setMinSizeKb("");
     setMaxSizeKb("");
@@ -323,8 +342,8 @@ export default function FilesClient() {
             </div>
             {files.length > 0 && (
               <label className="flex items-center gap-2 text-sm shrink-0 cursor-pointer">
-                <Checkbox checked={allSelected} onCheckedChange={toggleSelectAll} aria-label="Select all files on this page" />
-                <span className="text-muted-foreground hidden sm:inline text-xs">Select all</span>
+                <Checkbox checked={allSelected ? true : selected.size > 0 ? "indeterminate" : false} onCheckedChange={toggleSelectAll} aria-label="Select all matching files across all pages" />
+                <span className="text-muted-foreground hidden sm:inline text-xs">Select all matching</span>
               </label>
             )}
             <Button size="sm" asChild>
@@ -344,6 +363,7 @@ export default function FilesClient() {
               placeholder="Search by filename, sequence or public ID…"
               value={search}
               onChange={(e) => {
+                setSelected(new Set());
                 setSearch(e.target.value);
                 resetPage();
                 syncUrl({ search: e.target.value, page: "1" });
@@ -355,6 +375,7 @@ export default function FilesClient() {
           <Select
             value={channelId}
             onValueChange={(v) => {
+              setSelected(new Set());
               setChannelId(v);
               resetPage();
               syncUrl({ channelId: v === "all" ? "" : v, page: "1" });
@@ -373,6 +394,7 @@ export default function FilesClient() {
           <Select
             value={status}
             onValueChange={(v) => {
+              setSelected(new Set());
               setStatus(v);
               resetPage();
               syncUrl({ status: v, page: "1" });
@@ -422,6 +444,7 @@ export default function FilesClient() {
             <button
               key={opt.value}
               onClick={() => {
+                setSelected(new Set());
                 setMimeType(opt.value);
                 resetPage();
                 syncUrl({ mimeType: opt.value === "all" ? "" : opt.value, page: "1" });
@@ -439,16 +462,16 @@ export default function FilesClient() {
           <div className="flex gap-2 ml-auto">
             <Input
               type="number" min={0} placeholder="Min KB" value={minSizeKb}
-              onChange={(e) => { setMinSizeKb(e.target.value); resetPage(); syncUrl({ minSize: e.target.value, page: "1" }); }}
+              onChange={(e) => { setSelected(new Set()); setMinSizeKb(e.target.value); resetPage(); syncUrl({ minSize: e.target.value, page: "1" }); }}
               className="w-24 h-9 md:h-7 text-xs bg-white/[0.03] border-white/[0.08]" aria-label="Minimum size in KB"
             />
             <Input
               type="number" min={0} placeholder="Max KB" value={maxSizeKb}
-              onChange={(e) => { setMaxSizeKb(e.target.value); resetPage(); syncUrl({ maxSize: e.target.value, page: "1" }); }}
+              onChange={(e) => { setSelected(new Set()); setMaxSizeKb(e.target.value); resetPage(); syncUrl({ maxSize: e.target.value, page: "1" }); }}
               className="w-24 h-9 md:h-7 text-xs bg-white/[0.03] border-white/[0.08]" aria-label="Maximum size in KB"
             />
-            <DatePicker label="From" value={from} onChange={(v) => { setFrom(v); resetPage(); syncUrl({ from: v, page: "1" }); }} />
-            <DatePicker label="To" value={to} onChange={(v) => { setTo(v); resetPage(); syncUrl({ to: v, page: "1" }); }} />
+            <DatePicker label="From" value={from} onChange={(v) => { setSelected(new Set()); setFrom(v); resetPage(); syncUrl({ from: v, page: "1" }); }} />
+            <DatePicker label="To" value={to} onChange={(v) => { setSelected(new Set()); setTo(v); resetPage(); syncUrl({ to: v, page: "1" }); }} />
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearExtraFilters} className="shrink-0 h-7 px-2 text-xs">
                 <X className="size-3 mr-1" aria-hidden /> Clear
@@ -539,7 +562,7 @@ export default function FilesClient() {
 
       {/* ─── Floating batch action bar ─── */}
       {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 rounded-full shadow-2xl shadow-black/60 px-5 py-3 animate-page-enter border border-white/[0.12] glass-panel">
+        <div className="fixed bottom-3 left-2 right-2 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 flex flex-wrap items-center justify-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full shadow-2xl shadow-black/60 px-3 sm:px-5 py-3 animate-page-enter border border-white/[0.12] glass-panel max-w-[calc(100vw-1rem)]">
           <span className="size-6 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-[11px] font-bold text-emerald-400 shrink-0">
             {selected.size}
           </span>
@@ -547,6 +570,7 @@ export default function FilesClient() {
             {selected.size} selected
           </span>
           <div className="w-px h-4 bg-white/[0.08]" aria-hidden />
+          <BulkFileActions selectedIds={Array.from(selected)} onSelectionChange={(ids) => setSelected(new Set(ids))} />
           <Button
             size="sm"
             variant="destructive"
@@ -809,7 +833,7 @@ function FileListRow({ file, selected, onToggleSelect, onOpen, onDelete }: Omit<
       }}
     >
       <span onClick={(e) => e.stopPropagation()}>
-        <Checkbox checked={selected} onCheckedChange={onToggleSelect} aria-label={`Select ${file.originalName}`} />
+        <Checkbox checked={selected} disabled={file.status !== "active"} onCheckedChange={onToggleSelect} aria-label={`Select ${file.originalName}`} />
       </span>
       <span className="size-12 rounded-lg overflow-hidden bg-muted/40 shrink-0">
         <Thumb file={file} />
