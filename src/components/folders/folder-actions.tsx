@@ -82,7 +82,7 @@ function MoveDestinationPicker({
       const response = await fetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parentId: currentId }),
+        body: JSON.stringify(itemType === "folder" ? { parentId: currentId } : { folderId: currentId }),
       });
       const json = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(json.detail || json.error || "Move failed");
