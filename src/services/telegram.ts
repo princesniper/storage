@@ -641,16 +641,24 @@ class TelegramServiceImpl {
 
     const requestSize = 512 * 1024;
     const rangeLength = end - start + 1;
-    const offset = doc.size.subtract(doc.size).add(start);
-    const chunks: Buffer[] = [];
-    let remaining = rangeLength;
 
-    // GramJS `limit` is the total byte count, not a chunk count.
-    // A chunk-count limit truncates Range responses and breaks HTML5 video playback.
+    // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
+    // Browser Range requests can start at any byte, so fetch from the previous
+    // aligned boundary and trim the leading bytes after GramJS has read them.
+    const alignedStart = Math.floor(start / 4096) * 4096;
+    const leadingBytes = start - alignedStart;
+    const bytesToFetch = leadingBytes + rangeLength;
+    const chunkLimit = Math.ceil(bytesToFetch / requestSize);
+    const offset = doc.size.subtract(doc.size).add(alignedStart);
+    const chunks: Buffer[] = [];
+    let remaining = bytesToFetch;
+
+    // GramJS `iterDownload`'s `limit` is the maximum number of chunks yielded,
+    // not a byte count. Keep it to the number needed for this HTTP range.
     for await (const chunk of this.client.iterDownload({
       file: location,
       offset,
-      limit: rangeLength,
+      limit: chunkLimit,
       requestSize,
       fileSize: doc.size,
     })) {
@@ -662,7 +670,8 @@ class TelegramServiceImpl {
       }
     }
 
-    const bytes = Buffer.concat(chunks);
+    const fetchedBytes = Buffer.concat(chunks);
+    const bytes = fetchedBytes.subarray(leadingBytes, leadingBytes + rangeLength);
     if (bytes.length === 0) throw new Error("download returned empty");
     return {
       bytes,
