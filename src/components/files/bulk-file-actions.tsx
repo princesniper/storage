@@ -50,6 +50,7 @@ export function BulkFileActions({ selectedIds, onSelectionChange }: { selectedId
       onSelectionChange(aggregate.failed.map((item) => item.id));
       setOpen(false);
       await qc.invalidateQueries({ queryKey: ["files"] });
+      await qc.invalidateQueries({ queryKey: ["folder-browser"] });
       const moved = aggregate.moved.length; const failed = aggregate.failed.length;
       toast({ title: failed ? `${moved} moved, ${failed} failed` : `${moved} files moved`, description: failed ? "Conflicts and unavailable files were left unchanged. Failed items remain selected." : "Files moved without re-uploading.", variant: failed ? "destructive" : "default" });
     } catch (e) { setError(e instanceof Error ? e.message : "Move failed."); }
