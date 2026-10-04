@@ -648,7 +648,6 @@ class TelegramServiceImpl {
     const alignedStart = Math.floor(start / 4096) * 4096;
     const leadingBytes = start - alignedStart;
     const bytesToFetch = leadingBytes + rangeLength;
-    const chunkLimit = Math.ceil(bytesToFetch / requestSize);
     const offset = doc.size.subtract(doc.size).add(alignedStart);
     const chunks: Buffer[] = [];
     let remaining = bytesToFetch;
@@ -658,7 +657,7 @@ class TelegramServiceImpl {
     for await (const chunk of this.client.iterDownload({
       file: location,
       offset,
-      limit: chunkLimit,
+      limit: bytesToFetch,
       requestSize,
       fileSize: doc.size,
     })) {
