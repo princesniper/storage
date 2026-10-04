@@ -639,7 +639,7 @@ class TelegramServiceImpl {
       thumbSize: "",
     });
 
-    const requestSize = 512 * 1024;
+    const requestSize = 64 * 1024;
     const rangeLength = end - start + 1;
 
     // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
@@ -648,16 +648,16 @@ class TelegramServiceImpl {
     const alignedStart = Math.floor(start / 4096) * 4096;
     const leadingBytes = start - alignedStart;
     const bytesToFetch = leadingBytes + rangeLength;
+    const chunkLimit = Math.ceil(bytesToFetch / requestSize);
     const offset = doc.size.subtract(doc.size).add(alignedStart);
     const chunks: Buffer[] = [];
     let remaining = bytesToFetch;
 
-    // GramJS `iterDownload`'s `limit` is the maximum number of chunks yielded,
-    // not a byte count. Keep it to the number needed for this HTTP range.
+    // GramJS iterDownload limit counts yielded chunks, not bytes.
     for await (const chunk of this.client.iterDownload({
       file: location,
       offset,
-      limit: bytesToFetch,
+      limit: chunkLimit,
       requestSize,
       fileSize: doc.size,
     })) {
