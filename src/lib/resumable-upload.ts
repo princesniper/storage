@@ -7,7 +7,7 @@ import { pipeline } from "stream/promises";
 
 // Keep each browser -> Railway request small enough for slow/mobile links.
 // One MiB still keeps an 800 MB upload within the 1024-chunk session limit.
-export const RESUMABLE_CHUNK_SIZE = 1 * 1024 * 1024;
+export const RESUMABLE_CHUNK_SIZE = 256 * 1024;
 
 export type UploadManifest = {
   uploadId: string;
