@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { formatBytes, isVideoMime } from "@/lib/format";
+import { isRawMime } from "@/lib/env";
 import { cn } from "@/lib/utils";
 import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
 import { compressionPolicy } from "@/lib/compression/compression-policy";
@@ -290,7 +291,8 @@ export default function UploadClient() {
       if (abortRef.current) return;
 
       const isImage = item.file.type.startsWith("image/");
-      if (!isImage) {
+      const isRaw = isRawMime(item.file.type) || /\.(cr2|cr3|nef|nrw|arw|srf|sr2|dng|raf|rw2|orf|pef|ptx|srw|x3f|iiq|3fr|mos|mef|mrw|erf|kdc|dcr|raw)$/i.test(item.file.name);
+      if (!isImage || isRaw) {
         await upload(() => uploadOne({ ...item, status: "pending" }, channelId));
         return;
       }
