@@ -60,7 +60,7 @@ export async function POST(req: Request) {
 
   const chunkSize = isRawMime(mimeType) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
   const totalChunks = Math.ceil(input.size / chunkSize);
-  const maxChunks = isRawMime(mimeType) ? 8192 : 1024;
+  const maxChunks = isRawMime(mimeType) ? 16384 : 1024;
   if (totalChunks < 1 || totalChunks > maxChunks) {
     return NextResponse.json({ error: "TOO_MANY_CHUNKS" }, { status: 413 });
   }
