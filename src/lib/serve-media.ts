@@ -26,7 +26,7 @@ export const NEGATIVE_TTL = 60; // seconds — short cache for missing files
 export const PUBLIC_TTL = 86400; // 24h public cache
 // Bound each Telegram-backed video range request for responsive playback.
 export const MAX_VIDEO_RANGE_BYTES = 4 * 1024 * 1024;
-export const MAX_RAW_RANGE_BYTES = 16 * 1024 * 1024;
+export const MAX_RAW_RANGE_BYTES = 8 * 1024 * 1024;
 
 export interface ServableFile {
   id: number;
