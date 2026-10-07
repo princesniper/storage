@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
@@ -28,33 +28,17 @@ import { CommandPalette } from "@/components/dashboard/command-palette";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 const NAV_GROUPS = [
-  {
-    group: "OVERVIEW",
-    items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    ],
-  },
-  {
-    group: "LIBRARY",
-    items: [
-      { href: "/files", label: "Files", icon: ImageIcon },
-      { href: "/folders", label: "Folders", icon: FolderTree },
-      { href: "/upload", label: "Upload", icon: Upload },
-    ],
-  },
-  {
-    group: "INFRASTRUCTURE",
-    items: [
-      { href: "/channels", label: "Storage Channels", icon: FolderTree },
-    ],
-  },
-  {
-    group: "MANAGEMENT",
-    items: [
-      { href: "/audit", label: "Audit Log", icon: ScrollText },
-      { href: "/settings", label: "Settings", icon: Settings },
-    ],
-  },
+  { group: "OVERVIEW", items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] },
+  { group: "LIBRARY", items: [
+    { href: "/files", label: "Files", icon: ImageIcon },
+    { href: "/folders", label: "Folders", icon: FolderTree },
+    { href: "/upload", label: "Upload", icon: Upload },
+  ]},
+  { group: "INFRASTRUCTURE", items: [{ href: "/channels", label: "Storage Channels", icon: FolderTree }] },
+  { group: "MANAGEMENT", items: [
+    { href: "/audit", label: "Audit Log", icon: ScrollText },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ]},
 ];
 
 const NAV_FLAT = NAV_GROUPS.flatMap((g) => g.items);
@@ -63,9 +47,38 @@ function isActive(pathname: string | null, href: string) {
   return pathname === href || pathname?.startsWith(href + "/");
 }
 
+function DashboardNavLink({
+  href,
+  onNavigate,
+  children,
+  className,
+  ...props
+}: React.ComponentProps<typeof Link> & { onNavigate?: () => void }) {
+  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    // Keep modifier/middle-click behavior native, but make primary navigation
+    // deterministic. This prevents a stale/native navigation path from causing
+    // a full document reload when switching dashboard sections.
+    if (
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+    ) {
+      event.preventDefault();
+      onNavigate?.();
+    }
+  };
+
+  return (
+    <Link href={href} onClick={handleClick} className={className} {...props}>
+      {children}
+    </Link>
+  );
+}
+
 function useStorageStatus() {
   const [status, setStatus] = useState<string>("unknown");
-
   useEffect(() => {
     let active = true;
     const check = async () => {
@@ -82,12 +95,12 @@ function useStorageStatus() {
     const interval = setInterval(check, 30_000);
     return () => { active = false; clearInterval(interval); };
   }, []);
-
   return status;
 }
 
 export function DashboardShell({ children, sidebarExtra }: { children: React.ReactNode; sidebarExtra?: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const { data: session } = useSession();
   const [collapsedRaw, setCollapsedRaw] = useLocalStorageState("sidebar-collapsed", "0");
@@ -101,7 +114,11 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
   const adminInitial = adminEmail ? adminEmail[0].toUpperCase() : "A";
   const handleSignOut = () => signOut({ callbackUrl: "https://growplants-media.up.railway.app/login" });
 
-  // Cmd+K / Ctrl+K global shortcut
+  const navigate = useCallback((href: string, closeDrawer = false) => {
+    if (closeDrawer) setDrawerOpen(false);
+    if (href !== pathname) router.push(href);
+  }, [pathname, router]);
+
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
       e.preventDefault();
@@ -120,7 +137,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
     <div className="min-h-screen flex bg-background text-foreground">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
-      {/* ─── Desktop sidebar ─── */}
       <aside
         className={cn(
           "hidden md:flex flex-col border-r border-border transition-[width] duration-250 ease-out overflow-hidden shrink-0",
@@ -129,7 +145,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
         )}
         aria-label="Primary navigation"
       >
-        {/* Logo / brand */}
         <div className={cn("flex items-center gap-2.5 px-4 py-4 mb-1", collapsed && "justify-center px-2")}>
           <div className="size-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
             <Leaf className="size-4 text-emerald-400" aria-hidden />
@@ -146,7 +161,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
           )}
         </div>
 
-        {/* Nav groups */}
         <nav className="flex flex-col flex-1 px-2 overflow-y-auto" aria-label="Sections">
           {NAV_GROUPS.map((group) => (
             <div key={group.group} className="mb-3">
@@ -159,9 +173,10 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 {group.items.map((n) => {
                   const active = mounted && isActive(pathname, n.href);
                   const item = (
-                    <Link
+                    <DashboardNavLink
                       key={n.href}
                       href={n.href}
+                      onNavigate={() => navigate(n.href)}
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "relative flex items-center gap-2.5 rounded-lg text-sm font-medium transition-all duration-150",
@@ -182,7 +197,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                         aria-hidden
                       />
                       {!collapsed && <span className="truncate">{n.label}</span>}
-                    </Link>
+                    </DashboardNavLink>
                   );
                   if (collapsed) {
                     return (
@@ -201,18 +216,14 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
 
         {sidebarExtra && !collapsed && <div className="px-2.5 pb-2">{sidebarExtra}</div>}
 
-        {/* Footer: storage status + admin widget */}
         <div className={cn("border-t border-border p-2.5 space-y-2", collapsed && "flex flex-col items-center")}>
-          {/* Storage status pill */}
           {!collapsed ? (
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0 transition-colors",
                 storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
               )} aria-hidden />
-              <span className="text-xs font-medium text-muted-foreground flex-1 truncate">
-                Storage
-              </span>
+              <span className="text-xs font-medium text-muted-foreground flex-1 truncate">Storage</span>
               <span className={cn(
                 "text-[10px] font-medium tracking-wide",
                 storageConnected ? "text-emerald-400" : "text-red-400"
@@ -239,7 +250,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             </Tooltip>
           )}
 
-          {/* Admin identity */}
           {!collapsed && (
             <div className="flex items-center gap-2.5 px-2 py-1.5">
               <div
@@ -249,9 +259,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 {adminInitial}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-medium truncate" title={adminEmail}>
-                  {adminEmail || "Admin"}
-                </div>
+                <div className="text-xs font-medium truncate" title={adminEmail}>{adminEmail || "Admin"}</div>
                 <div className="text-[11px] text-muted-foreground">Administrator</div>
               </div>
             </div>
@@ -290,9 +298,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
         </div>
       </aside>
 
-      {/* ─── Content column ─── */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top header */}
         <header className="sticky top-0 z-30 flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border bg-background/85 backdrop-blur-md">
           <div className="flex items-center gap-2 min-w-0">
             <Button
@@ -314,7 +320,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             <SectionLabel pathname={pathname} />
           </div>
           <div className="flex items-center gap-2">
-            {/* Command palette trigger */}
             <button
               onClick={() => setPaletteOpen(true)}
               className="hidden md:flex items-center gap-2 h-8 px-3 rounded-lg border border-border bg-muted/40 hover:bg-accent hover:border-border transition-all duration-150 text-muted-foreground text-sm"
@@ -322,32 +327,20 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             >
               <Search className="size-3.5" aria-hidden />
               <span className="text-xs">Search…</span>
-              <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted border border-border leading-none">
-                ⌘K
-              </kbd>
+              <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted border border-border leading-none">⌘K</kbd>
             </button>
             <ThemeToggle />
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={handleSignOut}
-              className="size-9 text-muted-foreground hover:text-foreground"
-              aria-label="Sign out"
-              title="Sign out"
-            >
+            <Button size="icon" variant="ghost" onClick={handleSignOut} className="size-9 text-muted-foreground hover:text-foreground" aria-label="Sign out" title="Sign out">
               <LogOut className="size-4" />
             </Button>
           </div>
         </header>
 
         <main className="flex-1 p-4 md:p-8 w-full">
-          <div key={pathname} className="animate-page-enter max-w-7xl mx-auto w-full">
-            {children}
-          </div>
+          <div key={pathname} className="animate-page-enter max-w-7xl mx-auto w-full">{children}</div>
         </main>
       </div>
 
-      {/* ─── Mobile drawer ─── */}
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
           <SheetHeader className="px-4 py-4 border-b border-border text-left">
@@ -356,29 +349,23 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 <Leaf className="size-4 text-emerald-400" aria-hidden />
               </div>
               <div>
-                <SheetTitle className="text-sm">
-                  GrowPlants<span className="text-emerald-400"> Media</span>
-                </SheetTitle>
-                <div className="text-[10px] text-muted-foreground tracking-[0.04em] uppercase font-medium mt-0.5">
-                  Media Storage
-                </div>
+                <SheetTitle className="text-sm">GrowPlants<span className="text-emerald-400"> Media</span></SheetTitle>
+                <div className="text-[10px] text-muted-foreground tracking-[0.04em] uppercase font-medium mt-0.5">Media Storage</div>
               </div>
             </div>
           </SheetHeader>
           <nav className="flex flex-col flex-1 p-3 overflow-y-auto" aria-label="Sections">
             {NAV_GROUPS.map((group) => (
               <div key={group.group} className="mb-3">
-                <div className="px-3 py-1.5 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground/60 uppercase select-none">
-                  {group.group}
-                </div>
+                <div className="px-3 py-1.5 text-[10px] font-semibold tracking-[0.06em] text-muted-foreground/60 uppercase select-none">{group.group}</div>
                 <div className="flex flex-col gap-0.5">
                   {group.items.map((n) => {
                     const active = isActive(pathname, n.href);
                     return (
-                      <Link
+                      <DashboardNavLink
                         key={n.href}
                         href={n.href}
-                        onClick={() => setDrawerOpen(false)}
+                        onNavigate={() => navigate(n.href, true)}
                         aria-current={active ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-11",
@@ -389,7 +376,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                       >
                         <n.icon className="size-4 shrink-0" aria-hidden />
                         {n.label}
-                      </Link>
+                      </DashboardNavLink>
                     );
                   })}
                 </div>
@@ -397,7 +384,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             ))}
           </nav>
           <div className="border-t border-border p-3 space-y-2">
-            {/* Storage status */}
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0",
@@ -408,7 +394,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 {storageConnected ? "Connected" : "Offline"}
               </span>
             </div>
-            {/* Admin */}
             <div className="flex items-center gap-2.5 px-2 py-1.5">
               <div className="size-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-semibold text-emerald-400" aria-hidden>
                 {adminInitial}
@@ -417,9 +402,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 <div className="text-xs font-medium truncate">{adminEmail || "Admin"}</div>
                 <div className="text-[11px] text-muted-foreground">Administrator</div>
               </div>
-              <Button size="icon" variant="ghost" className="size-9" onClick={handleSignOut} aria-label="Sign out">
-                <LogOut className="size-4" />
-              </Button>
+              <Button size="icon" variant="ghost" className="size-9" onClick={handleSignOut} aria-label="Sign out"><LogOut className="size-4" /></Button>
             </div>
           </div>
         </SheetContent>
