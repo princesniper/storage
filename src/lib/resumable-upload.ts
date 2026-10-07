@@ -5,7 +5,9 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import { pipeline } from "stream/promises";
 
-export const RESUMABLE_CHUNK_SIZE = 2 * 1024 * 1024;
+// Keep each browser -> Railway request small enough for slow/mobile links.
+// One MiB still keeps an 800 MB upload within the 1024-chunk session limit.
+export const RESUMABLE_CHUNK_SIZE = 1 * 1024 * 1024;
 
 export type UploadManifest = {
   uploadId: string;
