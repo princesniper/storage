@@ -33,7 +33,7 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
   const detected = await fileTypeFromBuffer(head);
   const rawMime = rawMimeFromName(manifest.fileName);
   const detectedMime = normalizeMimeType(
-    rawMime && (!detected?.mime || detected.mime === "application/octet-stream")
+    rawMime && (!detected?.mime || detected.mime === "application/octet-stream" || detected.mime === "image/tiff")
       ? rawMime
       : detected?.mime ?? manifest.mimeType
   );
