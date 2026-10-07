@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyButton } from "@/components/ui/copy-button";
 import { formatBytes, isVideoMime } from "@/lib/format";
-import { isRawMime } from "@/lib/env";
+import { isRawMime } from "@/lib/raw";
 import { cn } from "@/lib/utils";
 import { compressFile, disposeCompressionResources } from "@/lib/compression/compression-client";
 import { compressionPolicy } from "@/lib/compression/compression-policy";
