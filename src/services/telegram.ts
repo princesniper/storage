@@ -639,7 +639,7 @@ class TelegramServiceImpl {
       thumbSize: "",
     });
 
-    const requestSize = 512 * 1024;
+    const requestSize = 1024 * 1024;
     const rangeLength = end - start + 1;
 
     // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
