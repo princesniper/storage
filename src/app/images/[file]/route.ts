@@ -34,7 +34,7 @@ export async function GET(req: Request, ctx: RouteContext) {
   // let the canonical-extension check below redirect it to the correct URL.
   const legacy = parsed
     ? null
-    : /^(\\d{1,12})\\.([a-z0-9]{2,20})$/i.exec(file.trim());
+    : /^(\d{1,12})\.([a-z0-9]{2,20})$/i.exec(file.trim());
   const sequenceNumber = parsed?.sequenceNumber ?? (legacy ? Number(legacy[1]) : NaN);
   if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber <= 0) return notFound();
 
