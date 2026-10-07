@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Camera, Download } from "lucide-react";
+import { Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const PREVIEW_RANGE_BYTES = 16 * 1024 * 1024;
