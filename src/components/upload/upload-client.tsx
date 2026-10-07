@@ -474,7 +474,13 @@ export default function UploadClient() {
             disabled={uploading}
             aria-label="Choose files to upload"
           />
-          <label htmlFor="file-input" className="cursor-pointer flex flex-col items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={uploading}
+            className="w-full cursor-pointer flex flex-col items-center gap-2.5 text-center disabled:cursor-not-allowed"
+            aria-controls="file-input"
+          >
             <span className={cn(
               "size-14 rounded-2xl flex items-center justify-center duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,color]",
               dragOver ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
@@ -485,7 +491,7 @@ export default function UploadClient() {
               {dragOver ? "Drop files to add them" : "Drop images or videos here or click to choose"}
             </span>
             <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, RAW (CR2/CR3/NEF/ARW/DNG/RAF…), MP4, WEBM, MOV · Images max 50 MB · RAW/video max 800 MB</span>
-          </label>
+          </button>
         </div>
 
         {batchError && (
