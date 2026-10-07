@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { telegramService, setTelegramUploadProgress, clearTelegramUploadProgress } from "@/services/telegram";
 import { audit } from "@/services/audit";
 import { cache } from "@/lib/cache";
-import { env, allowedMimeTypes, maxFileSizeBytes, maxVideoSizeBytes, isVideoMime, isAudioMime, isAllowedDetectedMime, normalizeMimeType } from "@/lib/env";
+import { env, allowedMimeTypes, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isVideoMime, isAudioMime, isRawMime, isAllowedDetectedMime, normalizeMimeType } from "@/lib/env";
 import { generatePublicId } from "@/lib/public-id";
 import { canonicalUrl, formatSequence } from "@/lib/media-url";
 import { rateLimit } from "@/services/rate-limit";
@@ -20,6 +20,7 @@ import { NextResponse } from "next/server";
 import { fileTypeFromBuffer } from "file-type";
 import { z } from "zod";
 import sharp from "sharp";
+import { rawMimeFromName } from "@/lib/raw";
 
 const listQuerySchema = z.object({
   search: z.string().max(200).optional().default(""),
@@ -278,7 +279,10 @@ export async function POST(req: Request) {
 
   // Magic byte MIME check (don't trust filename)
   const detected = await fileTypeFromBuffer(buf);
-  const detectedMime = detected?.mime ?? inferSafeTextMime(file.name || "", file.type || "", buf);
+  const rawMime = rawMimeFromName(file.name || "");
+  const detectedMime = rawMime && (!detected?.mime || detected.mime === "application/octet-stream")
+    ? rawMime
+    : detected?.mime ?? inferSafeTextMime(file.name || "", file.type || "", buf);
   if (!detectedMime || !isAllowedDetectedMime(detectedMime)) {
     return NextResponse.json(
       { error: "UNSUPPORTED_MIME", detected: detectedMime ?? "unknown" },
@@ -298,14 +302,15 @@ export async function POST(req: Request) {
   // Per-type size limit (MIME determines the limit)
   const isVideo = isVideoMime(detectedMime);
   const isAudio = detectedMime.toLowerCase().startsWith("audio/");
-  const typeLimit = isVideo ? maxVideoSizeBytes : maxFileSizeBytes;
+  const isRaw = isRawMime(detectedMime);
+  const typeLimit = isVideo ? maxVideoSizeBytes : isRaw ? maxRawSizeBytes : maxFileSizeBytes;
   if (buf.length > typeLimit) {
     return NextResponse.json(
       {
         error: "FILE_TOO_LARGE",
         maxMb: Math.round(typeLimit / 1024 / 1024),
         receivedBytes: buf.length,
-        kind: isVideo ? "video" : isAudio ? "audio" : "file",
+        kind: isVideo ? "video" : isRaw ? "raw" : isAudio ? "audio" : "file",
       },
       { status: 413 }
     );
