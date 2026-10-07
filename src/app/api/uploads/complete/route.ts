@@ -8,7 +8,8 @@ import { audit } from "@/services/audit";
 import { telegramService, setTelegramUploadProgress, setTelegramUploadResult, setTelegramUploadFailure } from "@/services/telegram";
 import { generatePublicId } from "@/lib/public-id";
 import { canonicalUrl } from "@/lib/media-url";
-import { isAllowedDetectedMime, isVideoMime, maxFileSizeBytes, maxVideoSizeBytes, normalizeMimeType } from "@/lib/env";
+import { isAllowedDetectedMime, isRawMime, isVideoMime, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, normalizeMimeType } from "@/lib/env";
+import { rawMimeFromName } from "@/lib/raw";
 import {
   assembleUpload,
   cleanupUpload,
@@ -30,11 +31,20 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
 
   const head = await readFileHead(assembled);
   const detected = await fileTypeFromBuffer(head);
-  const detectedMime = normalizeMimeType(detected?.mime ?? manifest.mimeType);
+  const rawMime = rawMimeFromName(manifest.fileName);
+  const detectedMime = normalizeMimeType(
+    rawMime && (!detected?.mime || detected.mime === "application/octet-stream")
+      ? rawMime
+      : detected?.mime ?? manifest.mimeType
+  );
   if (!detectedMime || !isAllowedDetectedMime(detectedMime)) {
     throw new Error(`UNSUPPORTED_MIME:${detectedMime || "unknown"}`);
   }
-  const typeLimit = isVideoMime(detectedMime) ? maxVideoSizeBytes : maxFileSizeBytes;
+  const typeLimit = isVideoMime(detectedMime)
+    ? maxVideoSizeBytes
+    : isRawMime(detectedMime)
+      ? maxRawSizeBytes
+      : maxFileSizeBytes;
   if (manifest.size > typeLimit) {
     throw new Error(`FILE_TOO_LARGE:${Math.round(typeLimit / 1024 / 1024)}`);
   }
