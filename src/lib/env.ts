@@ -112,7 +112,7 @@ export function isAudioMime(mime: string): boolean {
 
 export function isRawMime(mime: string): boolean {
   const normalized = normalizeMimeType(mime);
-  return normalized.startsWith("image/x-raw-") || normalized === "image/x-adobe-dng";
+  return normalized.startsWith("image/x-raw-") || normalized === "image/x-adobe-dng" || normalized === "image/x-raw";
 }
 
 export function isAllowedDetectedMime(mime: string): boolean {
