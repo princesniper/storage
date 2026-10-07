@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const PREVIEW_RANGE_BYTES = 8 * 1024 * 1024;
+const PREVIEW_RANGE_BYTES = 4 * 1024 * 1024;
 
 function findLargestJpeg(bytes: Uint8Array): Blob | null {
   let bestStart = -1;
