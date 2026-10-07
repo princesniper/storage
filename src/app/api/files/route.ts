@@ -262,8 +262,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "CHANNEL_NOT_FOUND_OR_INACTIVE" }, { status: 400 });
   }
 
-  // Absolute ceiling check before buffering (video limit is the largest allowed)
-  const absoluteMax = Math.max(maxFileSizeBytes, maxVideoSizeBytes);
+  // Absolute ceiling check before buffering. RAW and video are both allowed
+  // up to 800 MB; normal files keep their smaller configured limit.
+  const absoluteMax = Math.max(maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes);
   if (file.size > absoluteMax) {
     return NextResponse.json(
       { error: "FILE_TOO_LARGE", maxMb: Math.round(absoluteMax / 1024 / 1024), receivedBytes: file.size },
