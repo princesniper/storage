@@ -38,3 +38,8 @@ export function isVideoMime(mime: string): boolean {
 export function isAudioMime(mime: string): boolean {
   return mime.trim().toLowerCase().startsWith("audio/");
 }
+
+export function isRawMime(mime: string): boolean {
+  const normalized = mime.trim().toLowerCase();
+  return normalized.startsWith("image/x-raw-") || normalized === "image/x-adobe-dng" || normalized === "image/x-raw";
+}
