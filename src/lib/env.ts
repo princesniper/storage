@@ -25,6 +25,8 @@ const envSchema = z.object({
   // acts as an alias when MAX_FILE_SIZE_MB is unset.
   MAX_FILE_SIZE_MB: z.string().optional(),
   MAX_VIDEO_SIZE_MB: z.string().optional().transform((v) => (v ? Math.min(Number(v), 800) : 800)),
+  // Camera RAW files can be much larger than normal web images.
+  MAX_RAW_SIZE_MB: z.string().optional().transform((v) => (v ? Math.min(Number(v), 800) : 800)),
   ALLOWED_MIME_TYPES: z.string().default(
     [
       "image/jpeg","image/png","image/webp","image/gif","image/svg+xml",
@@ -68,6 +70,7 @@ function loadEnv() {
     MAX_IMAGE_SIZE_MB: process.env.MAX_IMAGE_SIZE_MB,
     MAX_FILE_SIZE_MB: process.env.MAX_FILE_SIZE_MB,
     MAX_VIDEO_SIZE_MB: process.env.MAX_VIDEO_SIZE_MB,
+    MAX_RAW_SIZE_MB: process.env.MAX_RAW_SIZE_MB,
     ALLOWED_MIME_TYPES: process.env.ALLOWED_MIME_TYPES,
     REDIS_URL: process.env.REDIS_URL,
     CACHE_TTL_SECONDS: process.env.CACHE_TTL_SECONDS,
@@ -107,9 +110,14 @@ export function isAudioMime(mime: string): boolean {
   return normalizeMimeType(mime).startsWith("audio/");
 }
 
+export function isRawMime(mime: string): boolean {
+  const normalized = normalizeMimeType(mime);
+  return normalized.startsWith("image/x-raw-") || normalized === "image/x-adobe-dng";
+}
+
 export function isAllowedDetectedMime(mime: string): boolean {
   const normalized = normalizeMimeType(mime);
-  return allowedMimeTypes.includes(normalized) || isAudioMime(normalized);
+  return allowedMimeTypes.includes(normalized) || isAudioMime(normalized) || isRawMime(normalized);
 }
 // V2: MAX_FILE_SIZE_MB is canonical (default 50). Legacy MAX_IMAGE_SIZE_MB
 // still works as a fallback alias when MAX_FILE_SIZE_MB is unset.
@@ -127,6 +135,7 @@ export const maxFileSizeBytes = resolveMaxFileMb() * 1024 * 1024;
 /** Backward-compat alias (V1 name). */
 export const maxImageSizeBytes = maxFileSizeBytes;
 export const maxVideoSizeBytes = env.MAX_VIDEO_SIZE_MB * 1024 * 1024;
+export const maxRawSizeBytes = env.MAX_RAW_SIZE_MB * 1024 * 1024;
 export const maxBulkUploadFiles = env.MAX_BULK_UPLOAD_FILES;
 
 export function isVideoMime(mime: string): boolean {
