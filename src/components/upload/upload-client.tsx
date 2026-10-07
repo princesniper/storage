@@ -465,7 +465,7 @@ export default function UploadClient() {
             ref={inputRef}
             type="file"
             multiple
-            accept="image/*,video/*,audio/*"
+            accept="image/*,video/*,audio/*,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.dng,.raf,.rw2,.orf,.pef,.ptx,.srw,.x3f,.iiq,.3fr,.mos,.mef,.mrw,.erf,.kdc,.dcr,.raw"
             onChange={onSelectFile}
             className="hidden"
             id="file-input"
@@ -482,7 +482,7 @@ export default function UploadClient() {
             <span className="text-sm font-medium">
               {dragOver ? "Drop files to add them" : "Drop images or videos here or click to choose"}
             </span>
-            <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, MP4, WEBM, MOV · Images max 50 MB · Videos max 800 MB</span>
+            <span className="text-xs text-muted-foreground">JPEG, PNG, WEBP, GIF, RAW (CR2/CR3/NEF/ARW/DNG/RAF…), MP4, WEBM, MOV · Images max 50 MB · RAW/video max 800 MB</span>
           </label>
         </div>
 
