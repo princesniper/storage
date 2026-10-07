@@ -3,7 +3,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { maxFileSizeBytes, maxVideoSizeBytes, isVideoMime, normalizeMimeType } from "@/lib/env";
+import { maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isRawMime, isVideoMime, normalizeMimeType } from "@/lib/env";
+import { rawMimeFromName } from "@/lib/raw";
 import { createUploadManifest, RESUMABLE_CHUNK_SIZE } from "@/lib/resumable-upload";
 
 const schema = z.object({
@@ -30,14 +31,19 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "INVALID_REQUEST", detail: parsed.error.message }, { status: 400 });
   const input = parsed.data;
-  const mimeType = normalizeMimeType(input.mimeType);
+  const rawMime = rawMimeFromName(input.fileName);
+  const mimeType = normalizeMimeType(
+    rawMime && (!input.mimeType || input.mimeType === "application/octet-stream")
+      ? rawMime
+      : input.mimeType
+  );
   if (!validRelativePath(input.relativePath)) return NextResponse.json({ error: "INVALID_RELATIVE_PATH" }, { status: 400 });
 
-  const absoluteMax = Math.max(maxFileSizeBytes, maxVideoSizeBytes);
+  const absoluteMax = Math.max(maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes);
   if (input.size > absoluteMax) {
     return NextResponse.json({ error: "FILE_TOO_LARGE", maxMb: Math.round(absoluteMax / 1024 / 1024), receivedBytes: input.size }, { status: 413 });
   }
-  const typeLimit = isVideoMime(mimeType) ? maxVideoSizeBytes : maxFileSizeBytes;
+  const typeLimit = isVideoMime(mimeType) ? maxVideoSizeBytes : isRawMime(mimeType) ? maxRawSizeBytes : maxFileSizeBytes;
   if (input.size > typeLimit) {
     return NextResponse.json({ error: "FILE_TOO_LARGE", maxMb: Math.round(typeLimit / 1024 / 1024), receivedBytes: input.size }, { status: 413 });
   }  const channel = await db.storageChannel.findFirst({
