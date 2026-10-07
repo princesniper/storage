@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const input = parsed.data;
   const rawMime = rawMimeFromName(input.fileName);
   const mimeType = normalizeMimeType(
-    rawMime && (!input.mimeType || input.mimeType === "application/octet-stream")
+    rawMime && (!input.mimeType || input.mimeType === "application/octet-stream" || input.mimeType === "image/tiff")
       ? rawMime
       : input.mimeType
   );
