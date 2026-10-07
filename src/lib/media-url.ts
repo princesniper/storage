@@ -16,7 +16,7 @@
  * requires MEDIA_PUBLIC_URL to be explicitly configured.
  */
 const DEFAULT_MEDIA_ORIGIN = process.env.NODE_ENV === "production"
-  ? "https://m.media-growplants.com"
+  ? "https://growplants-media.up.railway.app"
   : "http://localhost:3000";
 
 /**
@@ -78,6 +78,25 @@ const MIME_TO_EXT: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/x-raw-canon-cr2": "cr2",
+  "image/x-raw-canon-cr3": "cr3",
+  "image/x-raw-nikon": "nef",
+  "image/x-raw-sony": "arw",
+  "image/x-adobe-dng": "dng",
+  "image/x-raw-fuji": "raf",
+  "image/x-raw-panasonic": "rw2",
+  "image/x-raw-olympus": "orf",
+  "image/x-raw-pentax": "pef",
+  "image/x-raw-samsung": "srw",
+  "image/x-raw-sigma": "x3f",
+  "image/x-raw-phaseone": "iiq",
+  "image/x-raw-hasselblad": "3fr",
+  "image/x-raw-leaf": "mos",
+  "image/x-raw-mamiya": "mef",
+  "image/x-raw-minolta": "mrw",
+  "image/x-raw-epson": "erf",
+  "image/x-raw-kodak": "dcr",
+  "image/x-raw": "raw",
   "video/mp4": "mp4",
   "video/webm": "webm",
   "video/quicktime": "mov",
