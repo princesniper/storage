@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useEffect, useCallback, useSyncExternalStore } from "react";
 import {
@@ -47,36 +47,6 @@ function isActive(pathname: string | null, href: string) {
   return pathname === href || pathname?.startsWith(href + "/");
 }
 
-function DashboardNavLink({
-  href,
-  onNavigate,
-  children,
-  className,
-  ...props
-}: React.ComponentProps<typeof Link> & { onNavigate?: () => void }) {
-  const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
-    // Keep modifier/middle-click behavior native, but make primary navigation
-    // deterministic. This prevents a stale/native navigation path from causing
-    // a full document reload when switching dashboard sections.
-    if (
-      event.button === 0 &&
-      !event.metaKey &&
-      !event.ctrlKey &&
-      !event.shiftKey &&
-      !event.altKey
-    ) {
-      event.preventDefault();
-      onNavigate?.();
-    }
-  };
-
-  return (
-    <Link href={href} onClick={handleClick} className={className} {...props}>
-      {children}
-    </Link>
-  );
-}
-
 function useStorageStatus() {
   const [status, setStatus] = useState<string>("unknown");
   useEffect(() => {
@@ -100,7 +70,6 @@ function useStorageStatus() {
 
 export function DashboardShell({ children, sidebarExtra }: { children: React.ReactNode; sidebarExtra?: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
   const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
   const { data: session } = useSession();
   const [collapsedRaw, setCollapsedRaw] = useLocalStorageState("sidebar-collapsed", "0");
@@ -113,11 +82,6 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
   const adminEmail = (session?.user as { email?: string } | undefined)?.email ?? "";
   const adminInitial = adminEmail ? adminEmail[0].toUpperCase() : "A";
   const handleSignOut = () => signOut({ callbackUrl: "https://growplants-media.up.railway.app/login" });
-
-  const navigate = useCallback((href: string, closeDrawer = false) => {
-    if (closeDrawer) setDrawerOpen(false);
-    if (href !== pathname) router.push(href);
-  }, [pathname, router]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -173,11 +137,10 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 {group.items.map((n) => {
                   const active = mounted && isActive(pathname, n.href);
                   const item = (
-                    <DashboardNavLink
+                    <Link
                       key={n.href}
                       href={n.href}
-                      onNavigate={() => navigate(n.href)}
-                      aria-current={active ? "page" : undefined}
+                                            aria-current={active ? "page" : undefined}
                       className={cn(
                         "relative flex items-center gap-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                         collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
@@ -197,7 +160,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                         aria-hidden
                       />
                       {!collapsed && <span className="truncate">{n.label}</span>}
-                    </DashboardNavLink>
+                    </Link>
                   );
                   if (collapsed) {
                     return (
@@ -362,10 +325,10 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                   {group.items.map((n) => {
                     const active = isActive(pathname, n.href);
                     return (
-                      <DashboardNavLink
+                      <Link
                         key={n.href}
                         href={n.href}
-                        onNavigate={() => navigate(n.href, true)}
+                        onClick={() => setDrawerOpen(false)}
                         aria-current={active ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-11",
@@ -376,7 +339,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                       >
                         <n.icon className="size-4 shrink-0" aria-hidden />
                         {n.label}
-                      </DashboardNavLink>
+                      </Link>
                     );
                   })}
                 </div>
