@@ -280,7 +280,11 @@ export async function POST(req: Request) {
   // Magic byte MIME check (don't trust filename)
   const detected = await fileTypeFromBuffer(buf);
   const rawMime = rawMimeFromName(file.name || "");
-  const detectedMime = rawMime && (!detected?.mime || detected.mime === "application/octet-stream")
+  const detectedMime = rawMime && (
+    !detected?.mime ||
+    detected.mime === "application/octet-stream" ||
+    detected.mime === "image/tiff"
+  )
     ? rawMime
     : detected?.mime ?? inferSafeTextMime(file.name || "", file.type || "", buf);
   if (!detectedMime || !isAllowedDetectedMime(detectedMime)) {
