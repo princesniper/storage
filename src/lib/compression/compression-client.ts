@@ -67,6 +67,25 @@ async function compressOne(
   onProgress?: (progress: CompressionProgress) => void,
 ): Promise<CompressionResult> {
   const originalSize = file.size;
+
+  // PNGs are uploaded losslessly as-is. Browser OffscreenCanvas PNG
+  // re-encoding is expensive and can stall/fail on large PNGs; it also
+  // rarely produces a smaller file. Keep PNG uploads on the reliable
+  // original-file path and reserve local compression for JPEG/WebP.
+  if (file.type === "image/png") {
+    return {
+      originalFile: file,
+      file,
+      compressed: false,
+      originalSize,
+      outputSize: originalSize,
+      savingsBytes: 0,
+      savingsRatio: 0,
+      mimeType: file.type,
+      fallbackReason: "png-original-upload",
+    };
+  }
+
   const policy = compressionPolicy({ mode, size: originalSize });
 
   if (!policy.shouldAttempt) {
