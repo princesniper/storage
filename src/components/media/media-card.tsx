@@ -1,9 +1,10 @@
 "use client";
 import { useState } from "react";
-import { Film, Copy, Check, Eye, Trash2, Play, Music } from "lucide-react";
+import { Film, Copy, Check, Eye, Trash2, Play, Music, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBytes, isVideoMime, isAudioMime } from "@/lib/format";
+import { formatBytes, isVideoMime, isAudioMime, isRawMime } from "@/lib/format";
 import { VideoThumbnail } from "./video-thumbnail";
+import { RawPreview } from "./raw-preview";
 
 export interface MediaFile {
   id: number;
@@ -38,6 +39,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
   const [copied, setCopied] = useState(false);
   const isVideo = isVideoMime(file.mimeType);
   const isAudio = isAudioMime(file.mimeType);
+  const isRaw = isRawMime(file.mimeType);
 
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -82,6 +84,8 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
             />
           ) : isAudio ? (
             <div className="flex size-full items-center justify-center bg-muted/20"><Music className="size-12 text-muted-foreground/50" /></div>
+          ) : isRaw ? (
+            <RawPreview src={file.publicUrl} alt={file.originalName} />
           ) : (
             <img src={file.publicUrl} alt="" loading="lazy" className="size-full object-cover" />
           )}
@@ -93,7 +97,12 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
         </span>
 
         {/* Video indicator — bottom left */}
-        {isVideo && (
+        {isRaw ? (
+          <span className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-black/60 backdrop-blur border border-white/[0.08]">
+            <Camera className="size-2.5 text-white/70" aria-hidden />
+            <span className="text-[10px] font-semibold text-white/80">RAW</span>
+          </span>
+        ) : isVideo && (
           <span className="absolute bottom-2 left-2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-black/60 backdrop-blur border border-white/[0.08]">
             <Play className="size-2.5 text-white/70 fill-white/70" aria-hidden />
             <span className="text-[10px] font-semibold text-white/80">VIDEO</span>
