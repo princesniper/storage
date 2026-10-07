@@ -5,7 +5,7 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import { pipeline } from "stream/promises";
 
-export const RESUMABLE_CHUNK_SIZE = 8 * 1024 * 1024;
+export const RESUMABLE_CHUNK_SIZE = 2 * 1024 * 1024;
 
 export type UploadManifest = {
   uploadId: string;
