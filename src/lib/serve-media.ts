@@ -17,6 +17,7 @@
 import { db } from "@/lib/db";
 import { cache } from "@/lib/cache";
 import { formatSequence } from "@/lib/media-url";
+import { isRawMime } from "@/lib/env";
 import { telegramService } from "@/services/telegram";
 import { logger } from "@/lib/logger";
 import { createHash } from "crypto";
@@ -25,6 +26,7 @@ export const NEGATIVE_TTL = 60; // seconds — short cache for missing files
 export const PUBLIC_TTL = 86400; // 24h public cache
 // Bound each Telegram-backed video range request for responsive playback.
 export const MAX_VIDEO_RANGE_BYTES = 4 * 1024 * 1024;
+export const MAX_RAW_RANGE_BYTES = 16 * 1024 * 1024;
 
 export interface ServableFile {
   id: number;
@@ -67,7 +69,8 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
   const publicId = cacheKeyFor(file.sequenceNumber);
   const isVideo = file.mimeType.startsWith("video/");
   const isAudio = file.mimeType.startsWith("audio/");
-  const supportsRange = isVideo || isAudio;
+  const isRaw = isRawMime(file.mimeType);
+  const supportsRange = isVideo || isAudio || isRaw;
   const rangeHeader = req.headers.get("range");
 
   // Cache hit?
@@ -109,7 +112,8 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
           },
         });
       }
-      const requestedEnd = Math.min(parsed.end, parsed.start + MAX_VIDEO_RANGE_BYTES - 1);
+      const rangeLimit = isRaw ? MAX_RAW_RANGE_BYTES : MAX_VIDEO_RANGE_BYTES;
+      const requestedEnd = Math.min(parsed.end, parsed.start + rangeLimit - 1);
       const result = await telegramService.downloadFileRange(
         file.storageChannel.telegramChannelId,
         file.telegramMessageId,
@@ -235,7 +239,7 @@ function serveBytes(
     });
   }
 
-  // HTTP Range support for video (seekable playback)
+  // HTTP Range support for range-capable media (video/audio/RAW preview reads)
   const parsed = parseRange(rangeHeader, size);
   if (!parsed) {
     return new Response(JSON.stringify({ error: "INVALID_RANGE" }), {
