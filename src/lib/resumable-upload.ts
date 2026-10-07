@@ -4,10 +4,12 @@ import * as os from "os";
 import * as path from "path";
 import { randomUUID } from "crypto";
 import { pipeline } from "stream/promises";
+import { isRawFileName } from "@/lib/raw";
 
 // Keep each browser -> Railway request small enough for slow/mobile links.
 // One MiB still keeps an 800 MB upload within the 1024-chunk session limit.
 export const RESUMABLE_CHUNK_SIZE = 256 * 1024;
+export const RAW_RESUMABLE_CHUNK_SIZE = 128 * 1024;
 
 export type UploadManifest = {
   uploadId: string;
@@ -65,9 +67,10 @@ export async function readUploadManifest(uploadId: string): Promise<UploadManife
 export async function writeUploadChunk(uploadId: string, index: number, bytes: Uint8Array) {
   const manifest = await readUploadManifest(uploadId);
   if (index >= manifest.totalChunks) throw new Error("Chunk index out of range");
+  const chunkSize = isRawFileName(manifest.fileName) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
   const expected = index === manifest.totalChunks - 1
-    ? manifest.size - index * RESUMABLE_CHUNK_SIZE
-    : RESUMABLE_CHUNK_SIZE;
+    ? manifest.size - index * chunkSize
+    : chunkSize;
   if (bytes.byteLength !== expected) {
     throw new Error(`Invalid chunk size: expected ${expected}, received ${bytes.byteLength}`);
   }
@@ -93,9 +96,10 @@ export async function assembleUpload(uploadId: string): Promise<string> {
     for (let index = 0; index < manifest.totalChunks; index += 1) {
       const source = chunkPath(uploadId, index);
       const stat = await fs.stat(source);
+      const chunkSize = isRawFileName(manifest.fileName) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
       const expected = index === manifest.totalChunks - 1
-        ? manifest.size - index * RESUMABLE_CHUNK_SIZE
-        : RESUMABLE_CHUNK_SIZE;
+        ? manifest.size - index * chunkSize
+        : chunkSize;
       if (stat.size !== expected) throw new Error(`Chunk ${index} is incomplete`);
       const data = await fs.readFile(source);
       await handle.write(data);
