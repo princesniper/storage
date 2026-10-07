@@ -53,7 +53,8 @@ export async function GET(req: Request, ctx: RouteContext) {
 
   // Canonical extension enforcement (301, same host — works on any domain).
   const canonicalExt = extForMime(dbFile.mimeType);
-  if (parsed.ext !== canonicalExt) {
+  const requestedExt = parsed?.ext ?? legacy![2].toLowerCase();
+  if (requestedExt !== canonicalExt) {
     // Redirect to the configured canonical public origin, never the incoming
     // Railway/internal request host (for example 0.0.0.0:8080).
     return NextResponse.redirect(canonicalUrl(dbFile.sequenceNumber, dbFile.mimeType), 301);
