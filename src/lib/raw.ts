@@ -22,7 +22,7 @@ const RAW_MIME_BY_EXTENSION: Record<string, string> = {
   srw: "image/x-raw-samsung",
   x3f: "image/x-raw-sigma",
   iiq: "image/x-raw-phaseone",
-  3fr: "image/x-raw-hasselblad",
+  "3fr": "image/x-raw-hasselblad",
   mos: "image/x-raw-leaf",
   mef: "image/x-raw-mamiya",
   mrw: "image/x-raw-minolta",
