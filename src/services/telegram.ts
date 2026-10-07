@@ -132,7 +132,7 @@ class TelegramServiceImpl {
           new StringSession(sessionString),
           env.TELEGRAM_API_ID,
           env.TELEGRAM_API_HASH,
-          { connectionRetries: 5, useWSS: true }
+          { connectionRetries: 10, reconnectRetries: 10, requestRetries: 8, downloadRetries: 8, retryDelay: 1000, autoReconnect: true, maxConcurrentDownloads: 2, useWSS: false }
         );
         await this.client.connect();
         if (!sessionString) {
@@ -167,7 +167,7 @@ class TelegramServiceImpl {
         new StringSession(sessionString),
         env.TELEGRAM_API_ID,
         env.TELEGRAM_API_HASH,
-        { connectionRetries: 5, useWSS: true }
+        { connectionRetries: 10, reconnectRetries: 10, requestRetries: 8, downloadRetries: 8, retryDelay: 1000, autoReconnect: true, maxConcurrentDownloads: 2, useWSS: false }
       );
       await this.client.connect();
       const authorized = await this.client.checkAuthorization();
@@ -745,7 +745,7 @@ class TelegramServiceImpl {
       new StringSession(""),
       env.TELEGRAM_API_ID,
       env.TELEGRAM_API_HASH,
-      { connectionRetries: 5, useWSS: true }
+      { connectionRetries: 10, reconnectRetries: 10, requestRetries: 8, downloadRetries: 8, retryDelay: 1000, autoReconnect: true, maxConcurrentDownloads: 2, useWSS: false }
     );
 
     try {
