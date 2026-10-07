@@ -379,7 +379,7 @@ export default function UploadClient() {
         title="Upload Media"
         description="Add assets to your media infrastructure · no app-level batch or folder storage cap."
         actions={
-          <Button size="sm" variant="outline" onClick={() => router.push("/files")}>
+          <Button type="button" size="sm" variant="outline" onClick={() => router.push("/files")}>
             View library
           </Button>
         }
@@ -391,7 +391,7 @@ export default function UploadClient() {
           <AlertTitle>No active storage channels</AlertTitle>
           <AlertDescription>
             Add a storage destination first before uploading.
-            <Button size="sm" variant="link" onClick={() => router.push("/channels")}>
+            <Button type="button" size="sm" variant="link" onClick={() => router.push("/channels")}>
               Go to Storage Channels
             </Button>
           </AlertDescription>
@@ -503,7 +503,7 @@ export default function UploadClient() {
                 {items.length} file{items.length > 1 ? "s" : ""} selected
               </span>
               {!uploading && (
-                <Button size="sm" variant="ghost" onClick={clearAll}>
+                <Button type="button" size="sm" variant="ghost" onClick={clearAll}>
                   Clear all
                 </Button>
               )}
@@ -588,7 +588,7 @@ export default function UploadClient() {
                         {item.url}
                       </code>
                       <CopyButton text={item.url} iconOnly label="Copy URL" className="size-7" onCopy={() => toast({ title: "Copied" })} />
-                      <Button size="sm" variant="ghost" className="size-7 px-0" asChild>
+                      <Button type="button" size="sm" variant="ghost" className="size-7 px-0" asChild>
                         <a href={item.url} target="_blank" rel="noreferrer" aria-label={`Open ${item.file.name} in new tab`}>
                           <ExternalLink className="size-3.5" aria-hidden />
                         </a>
@@ -597,7 +597,7 @@ export default function UploadClient() {
                   )}
                 </div>
                 {!uploading && item.status !== "success" && (
-                  <Button variant="ghost" size="icon" className="size-9 shrink-0" onClick={() => removeItem(item.key)} aria-label={`Remove ${item.file.name}`}>
+                  <Button type="button" variant="ghost" size="icon" className="size-9 shrink-0" onClick={() => removeItem(item.key)} aria-label={`Remove ${item.file.name}`}>
                     <X className="size-4" aria-hidden />
                   </Button>
                 )}
@@ -610,7 +610,7 @@ export default function UploadClient() {
         {uploading && (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span className="tabular-nums">Uploading… {succeeded.length}/{items.length} done</span>
-            <Button size="sm" variant="ghost" onClick={cancelAll}>Cancel</Button>
+            <Button type="button" size="sm" variant="ghost" onClick={cancelAll}>Cancel</Button>
           </div>
         )}
 
@@ -646,7 +646,7 @@ export default function UploadClient() {
                     className="flex-1"
                     onCopy={() => toast({ title: "Copied", description: "Public URL copied to clipboard." })}
                   />
-                  <Button size="default" variant="outline" className="flex-1" asChild>
+                  <Button type="button" size="default" variant="outline" className="flex-1" asChild>
                     <a href={succeeded[0].url} target="_blank" rel="noreferrer">
                       <ExternalLink className="size-3.5 mr-1.5" aria-hidden /> Open
                     </a>
@@ -654,10 +654,10 @@ export default function UploadClient() {
                 </div>
               </div>
               <div className="flex gap-2 flex-wrap pt-1">
-                <Button size="sm" variant="ghost" onClick={resetBatch}>
+                <Button type="button" size="sm" variant="ghost" onClick={resetBatch}>
                   <Plus className="size-3.5 mr-1" aria-hidden /> Upload Another
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => router.push("/files")}>
+                <Button type="button" size="sm" variant="ghost" onClick={() => router.push("/files")}>
                   View All Files
                 </Button>
               </div>
@@ -685,21 +685,21 @@ export default function UploadClient() {
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {succeeded.length > 0 && (
-                <Button size="sm" variant="secondary" onClick={copyAll}>
+                <Button type="button" size="sm" variant="secondary" onClick={copyAll}>
                   Copy All URLs
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={resetBatch}>
+              <Button type="button" size="sm" variant="outline" onClick={resetBatch}>
                 <Plus className="size-3.5 mr-1" aria-hidden /> Upload Another Batch
               </Button>
-              <Button size="sm" onClick={() => router.push("/files")}>View All Files</Button>
+              <Button type="button" size="sm" onClick={() => router.push("/files")}>View All Files</Button>
             </CardContent>
           </Card>
         )}
 
         {!allDone && (
           <div className="flex gap-2">
-            <Button onClick={startUpload} disabled={items.length === 0 || !channelId || uploading}>
+            <Button type="button" onClick={startUpload} disabled={items.length === 0 || !channelId || uploading}>
               {uploading && <Loader2 className="size-4 animate-spin mr-2" aria-hidden />}
               {uploading ? `Uploading… ${succeeded.length}/${items.length}` : items.length > 1 ? `Upload ${items.length} files` : "Upload"}
             </Button>
