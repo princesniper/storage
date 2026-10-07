@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isRawMime, isVideoMime, normalizeMimeType } from "@/lib/env";
 import { rawMimeFromName } from "@/lib/raw";
-import { createUploadManifest, RESUMABLE_CHUNK_SIZE } from "@/lib/resumable-upload";
+import { createUploadManifest, RAW_RESUMABLE_CHUNK_SIZE, RESUMABLE_CHUNK_SIZE } from "@/lib/resumable-upload";
 
 const schema = z.object({
   fileName: z.string().min(1).max(255),
@@ -58,8 +58,10 @@ export async function POST(req: Request) {
     if (!folder) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
   }
 
-  const totalChunks = Math.ceil(input.size / RESUMABLE_CHUNK_SIZE);
-  if (totalChunks < 1 || totalChunks > 1024) {
+  const chunkSize = isRawMime(mimeType) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
+  const totalChunks = Math.ceil(input.size / chunkSize);
+  const maxChunks = isRawMime(mimeType) ? 8192 : 1024;
+  if (totalChunks < 1 || totalChunks > maxChunks) {
     return NextResponse.json({ error: "TOO_MANY_CHUNKS" }, { status: 413 });
   }
 
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
   return NextResponse.json({
     success: true,
     uploadId: manifest.uploadId,
-    chunkSize: RESUMABLE_CHUNK_SIZE,
+    chunkSize,
     totalChunks,
   });
 }
