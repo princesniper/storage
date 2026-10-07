@@ -40,7 +40,7 @@ export async function GET(req: Request, ctx: RouteContext) {
 
   const dbFile = await loadFileBySequence(sequenceNumber);
   if (!dbFile) {
-    await cache.setExists(cacheKeyFor(parsed.sequenceNumber), false);
+    await cache.setExists(cacheKeyFor(sequenceNumber), false);
     return notFound();
   }
   if (dbFile.status !== "active") {
