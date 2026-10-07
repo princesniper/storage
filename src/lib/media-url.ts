@@ -135,7 +135,7 @@ export function mediaPath(sequenceNumber: number, mimeType: string): string {
   return `/images/${formatSequence(sequenceNumber)}.${extForMime(mimeType)}`;
 }
 
-/** Full canonical public URL, e.g. https://m.media-growplants.com/images/000042.jpg
+/** Full canonical public URL, e.g. https://growplants-media.up.railway.app/images/000042.jpg
  *  Environment-independent: identical output no matter where the app runs. */
 export function canonicalUrl(sequenceNumber: number, mimeType: string): string {
   return `${CANONICAL_MEDIA_ORIGIN}${mediaPath(sequenceNumber, mimeType)}`;
