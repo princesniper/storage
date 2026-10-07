@@ -469,7 +469,7 @@ class TelegramServiceImpl {
     const telegramFile = new CustomFile(originalName, fileSize, filePath);
     // GramJS defaults to one upload worker. Keep concurrency bounded to improve
     // large-file throughput without using an unstable/high worker count.
-    const configuredWorkers = Number.parseInt(process.env.TELEGRAM_UPLOAD_WORKERS ?? "4", 10);
+    const configuredWorkers = Number.parseInt(process.env.TELEGRAM_UPLOAD_WORKERS ?? "8", 10);
     const workers = Number.isFinite(configuredWorkers)
       ? Math.max(1, Math.min(8, configuredWorkers))
       : 4;
@@ -639,7 +639,7 @@ class TelegramServiceImpl {
       thumbSize: "",
     });
 
-    const requestSize = 64 * 1024;
+    const requestSize = 512 * 1024;
     const rangeLength = end - start + 1;
 
     // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
