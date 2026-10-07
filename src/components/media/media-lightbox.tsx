@@ -5,9 +5,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X, ChevronLeft, ChevronRight, MoreVertical, RotateCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { isVideoMime } from "@/lib/format";
+import { isAudioMime, isRawMime, isVideoMime } from "@/lib/format";
 import type { MediaFile } from "./media-card";
 import { MediaInspector } from "./media-inspector";
+import { RawPreview } from "./raw-preview";
 
 interface MediaLightboxProps {
   file: MediaFile | null;
@@ -225,7 +226,8 @@ export function MediaLightbox({
   if (!mounted || !open || !file) return null;
 
   const isVideo = isVideoMime(file.mimeType);
-  const isAudio = file.mimeType.toLowerCase().startsWith("audio/");
+  const isAudio = isAudioMime(file.mimeType);
+  const isRaw = isRawMime(file.mimeType);
   const mediaFitClass = rotation % 180 === 0
     ? "max-w-[min(92vw,1200px)] max-h-[min(82dvh,900px)]"
     : "max-w-[min(82dvh,900px)] max-h-[min(92vw,1200px)]";
@@ -362,6 +364,10 @@ export function MediaLightbox({
               onError={() => setMediaError(true)}
               className="max-h-[min(82dvh,900px)] max-w-[min(92vw,1200px)] rounded-xl border border-white/10 bg-black object-contain shadow-2xl"
             />
+          ) : isRaw ? (
+            <div className="flex max-h-[82dvh] max-w-[92vw] items-center justify-center rounded-xl border border-white/10 bg-black shadow-2xl overflow-hidden">
+              <RawPreview src={file.publicUrl} alt={file.originalName} className="max-h-[82dvh] max-w-[92vw] object-contain" />
+            </div>
           ) : isAudio ? (
             <div className="flex w-full max-w-2xl flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl backdrop-blur-xl">
               <div className="text-center">
@@ -413,7 +419,7 @@ export function MediaLightbox({
 
         </div>
 
-        {!isVideo && !isAudio && (
+        {!isVideo && !isAudio && !isRaw && (
           <Button
             variant="ghost"
             className="absolute bottom-4 right-3 z-30 h-10 rounded-xl border border-white/10 bg-black/55 px-3 text-white/85 shadow-lg backdrop-blur-xl hover:bg-white/10 hover:text-white sm:right-5"
