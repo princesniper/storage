@@ -83,6 +83,8 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
               src={file.publicUrl}
               alt={file.originalName}
               className="size-full object-cover"
+              previewUrl={file.previewUrl}
+              previewStatus={file.previewStatus}
               fallback={<div className="flex size-full items-center justify-center bg-muted/20"><Film className="size-12 text-muted-foreground/50" /></div>}
             />
           ) : isAudio ? (

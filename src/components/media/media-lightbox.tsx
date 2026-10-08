@@ -357,6 +357,7 @@ export function MediaLightbox({
             <video
               key={file.id}
               src={file.publicUrl}
+              poster={file.previewStatus === "ready" ? (file.previewUrl ?? undefined) : undefined}
               controls
               preload="metadata"
               playsInline

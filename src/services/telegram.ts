@@ -706,69 +706,102 @@ class TelegramServiceImpl {
       throw new Error("INVALID_RANGE");
     }
 
-    const peer = await this.resolvePeer(peerId);
-    const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
-    const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
-    if (!fresh) throw new Error("Message not found");
-
-    const media = fresh.media as
-      | (Api.MessageMediaDocument & {
-          document?: Api.Document & {
-            id: { toString(): string };
-            accessHash: { toString(): string };
-            fileReference: Buffer;
-          };
-        })
-      | undefined;
-    const doc = media?.document;
-    if (!doc) throw new Error("Message has no media document");
-
-    const newRef = doc.fileReference.toString("base64");
-    const refreshed = newRef !== currentFileReferenceB64;
-    const location = new Api.InputDocumentFileLocation({
-      id: doc.id,
-      accessHash: doc.accessHash,
-      fileReference: doc.fileReference,
-      thumbSize: "",
-    });
-
     const requestSize = 512 * 1024;
     const rangeLength = end - start + 1;
+    let lastError: unknown = null;
 
-    // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
-    // Browser Range requests can start at any byte, so fetch from the previous
-    // aligned boundary and trim the leading bytes after GramJS has read them.
-    const alignedStart = Math.floor(start / 4096) * 4096;
-    const leadingBytes = start - alignedStart;
-    const bytesToFetch = leadingBytes + rangeLength;
-    const chunkLimit = Math.ceil(bytesToFetch / requestSize);
-    const offset = doc.size.subtract(doc.size).add(alignedStart);
-    const chunks: Buffer[] = [];
-    let remaining = bytesToFetch;
+    // Telegram can return transient upload.GetFile timeouts while serving many
+    // browser Range requests. Retry the bounded range instead of turning a
+    // single transient Telegram timeout into a 502 for the video player.
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        if (!this.client || this.status !== "connected") {
+          await this.ensureConnectedClient(true);
+        }
+        if (!this.client) throw new Error(this.notConnectedMessage());
 
-    // GramJS iterDownload limit counts yielded chunks, not bytes.
-    for await (const chunk of this.client.iterDownload({
-      file: location,
-      offset,
-      limit: chunkLimit,
-      requestSize,
-      fileSize: doc.size,
-    })) {
-      if (remaining <= 0) break;
-      const take = Math.min(chunk.length, remaining);
-      if (take > 0) {
-        chunks.push(chunk.subarray(0, take));
-        remaining -= take;
+        const peer = await this.resolvePeer(peerId);
+        const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
+        const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
+        if (!fresh) throw new Error("Message not found");
+
+        const media = fresh.media as
+          | (Api.MessageMediaDocument & {
+              document?: Api.Document & {
+                id: { toString(): string };
+                accessHash: { toString(): string };
+                fileReference: Buffer;
+              };
+            })
+          | undefined;
+        const doc = media?.document;
+        if (!doc) throw new Error("Message has no media document");
+
+        const newRef = doc.fileReference.toString("base64");
+        const refreshed = newRef !== currentFileReferenceB64;
+        const location = new Api.InputDocumentFileLocation({
+          id: doc.id,
+          accessHash: doc.accessHash,
+          fileReference: doc.fileReference,
+          thumbSize: "",
+        });
+
+        // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
+        // Browser Range requests can start at any byte, so fetch from the
+        // previous aligned boundary and trim the leading bytes afterwards.
+        const alignedStart = Math.floor(start / 4096) * 4096;
+        const leadingBytes = start - alignedStart;
+        const bytesToFetch = leadingBytes + rangeLength;
+        const chunkLimit = Math.ceil(bytesToFetch / requestSize);
+        const offset = doc.size.subtract(doc.size).add(alignedStart);
+        const chunks: Buffer[] = [];
+        let remaining = bytesToFetch;
+
+        for await (const chunk of this.client.iterDownload({
+          file: location,
+          offset,
+          limit: chunkLimit,
+          requestSize,
+          fileSize: doc.size,
+        })) {
+          if (remaining <= 0) break;
+          const take = Math.min(chunk.length, remaining);
+          if (take > 0) {
+            chunks.push(chunk.subarray(0, take));
+            remaining -= take;
+          }
+        }
+
+        const fetchedBytes = Buffer.concat(chunks);
+        const bytes = fetchedBytes.subarray(leadingBytes, leadingBytes + rangeLength);
+        if (bytes.length !== rangeLength) {
+          throw new Error(`RANGE_INCOMPLETE:${bytes.length}/${rangeLength}`);
+        }
+
+        return {
+          bytes,
+          refreshedReferenceB64: refreshed ? newRef : undefined,
+        };
+      } catch (error) {
+        lastError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        logger.warn("Telegram range download retry", {
+          messageId,
+          start,
+          end,
+          attempt,
+          reason: message.slice(0, 300),
+        });
+        if (attempt < 3) {
+          if (!this.client?.connected || /TIMEOUT|CONNECTION|AUTH_KEY/i.test(message)) {
+            try { await this.ensureConnectedClient(true); } catch {}
+          }
+          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+        }
       }
     }
 
-    const fetchedBytes = Buffer.concat(chunks);
-    const bytes = fetchedBytes.subarray(leadingBytes, leadingBytes + rangeLength);
-    if (bytes.length === 0) throw new Error("download returned empty");
-    return {
-      bytes,
-      refreshedReferenceB64: refreshed ? newRef : undefined,
-    };
+    throw lastError instanceof Error ? lastError : new Error("VIDEO_RANGE_DOWNLOAD_FAILED");
   }
 
   /**

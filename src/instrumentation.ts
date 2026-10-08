@@ -14,7 +14,9 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { initGracefulShutdown } = await import("./lib/shutdown");
     const { startDngPreviewWorker } = await import("./lib/dng-preview");
+    const { startVideoThumbnailWorker } = await import("./lib/video-thumbnail");
     initGracefulShutdown();
     startDngPreviewWorker();
+    startVideoThumbnailWorker();
   }
 }

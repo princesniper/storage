@@ -3,6 +3,7 @@
 # Production image for the Telegram-backed media storage app (Next.js standalone).
 # - Node 22 LTS on Debian bookworm-slim (glibc — required by sharp's prebuilt libvips).
 # - No devDependencies, no .env, no secrets, no SQLite files in the final image.
+# - FFmpeg/ffprobe are installed for production video thumbnail generation and media inspection.
 # - Migrations run via Fly release_command (npx prisma migrate deploy), NOT at build.
 # - The container runs `node server.js` directly (no Bun, no Caddy in prod).
 #
@@ -42,7 +43,7 @@ RUN npm run build
 # ---------- runner: minimal production image ----------
 FROM node:22-bookworm-slim AS runner
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl libraw-bin dcraw \
+ && apt-get install -y --no-install-recommends openssl libraw-bin dcraw ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production \

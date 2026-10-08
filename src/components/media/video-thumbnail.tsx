@@ -1,83 +1,58 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-
-const cache = new Map<string, string>();
+import type { ReactNode } from "react";
+import { Film, Loader2 } from "lucide-react";
 
 interface VideoThumbnailProps {
   src: string;
   alt: string;
   className?: string;
   fallback: ReactNode;
+  previewUrl?: string | null;
+  previewStatus?: string;
 }
 
-export function VideoThumbnail({ src, alt, className, fallback }: VideoThumbnailProps) {
-  const [thumbnail, setThumbnail] = useState<string | null>(() => cache.get(src) ?? null);
-  const [mounted, setMounted] = useState(false);
-  const [error, setError] = useState(false);
+export function VideoThumbnail({
+  src,
+  alt,
+  className,
+  fallback,
+  previewUrl,
+  previewStatus = "none",
+}: VideoThumbnailProps) {
+  if (previewStatus === "ready" && previewUrl) {
+    return (
+      <img
+        src={previewUrl}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        className={className}
+      />
+    );
+  }
 
-  useEffect(() => setMounted(true), []);
+  if (previewStatus === "pending" || previewStatus === "processing") {
+    return (
+      <div className="relative flex size-full items-center justify-center overflow-hidden bg-muted/20">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground/70">
+          <Loader2 className="size-7 animate-spin" aria-hidden />
+          <span className="text-[9px] font-semibold tracking-widest">GENERATING THUMBNAIL…</span>
+        </div>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    if (thumbnail || error || !mounted) return;
-    const video = document.createElement("video");
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = "metadata";
-    video.crossOrigin = "anonymous";
+  if (previewStatus === "failed") {
+    return (
+      <div className="relative flex size-full items-center justify-center overflow-hidden bg-muted/20">
+        <div className="flex flex-col items-center gap-2 text-muted-foreground/60">
+          <Film className="size-10" aria-hidden />
+          <span className="text-[9px] font-semibold tracking-widest">THUMBNAIL UNAVAILABLE</span>
+        </div>
+      </div>
+    );
+  }
 
-    const cleanup = () => {
-      video.removeAttribute("src");
-      video.load();
-      video.remove();
-    };
-    const fail = () => { setError(true); cleanup(); };
-    const capture = () => {
-      try {
-        const width = video.videoWidth;
-        const height = video.videoHeight;
-        if (!width || !height) return fail();
-        const canvas = document.createElement("canvas");
-        const max = 720;
-        const scale = Math.min(1, max / Math.max(width, height));
-        canvas.width = Math.max(1, Math.round(width * scale));
-        canvas.height = Math.max(1, Math.round(height * scale));
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return fail();
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const data = canvas.toDataURL("image/jpeg", 0.82);
-        cache.set(src, data);
-        setThumbnail(data);
-        cleanup();
-      } catch {
-        fail();
-      }
-    };
-
-    video.addEventListener("loadeddata", () => {
-      if (video.currentTime === 0) capture();
-      else {
-        try { video.currentTime = 0; } catch { capture(); }
-      }
-    }, { once: true });
-    video.addEventListener("seeked", capture, { once: true });
-    video.addEventListener("error", fail, { once: true });
-    video.src = src;
-    video.load();
-    document.body.appendChild(video);
-    video.style.position = "fixed";
-    video.style.width = "1px";
-    video.style.height = "1px";
-    video.style.opacity = "0";
-    video.style.pointerEvents = "none";
-    video.style.left = "-10000px";
-    video.style.top = "-10000px";
-
-    return cleanup;
-  }, [src, thumbnail, error, mounted]);
-
-  return <>
-    {thumbnail ? <img src={thumbnail} alt={alt} loading="lazy" className={className} /> : fallback}
-    {mounted && null}
-  </>;
+  return <>{fallback}</>;
 }

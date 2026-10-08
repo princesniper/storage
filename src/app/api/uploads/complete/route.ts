@@ -103,7 +103,8 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
           telegramFileReference: upload.fileReference,
           publicUrl: canonicalUrl(seq.id, detectedMime),
           status: "active",
-          previewStatus: isRawMime(detectedMime) ? "pending" : "none",
+          // RAW and video previews are derived asynchronously. The original upload succeeds independently.
+          previewStatus: isRawMime(detectedMime) || isVideoMime(detectedMime) ? "pending" : "none",
         },
         include: { storageChannel: { select: { id: true, name: true } }, folder: { select: { id: true, name: true } } },
       });

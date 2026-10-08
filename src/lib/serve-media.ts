@@ -73,8 +73,9 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
   const supportsRange = isVideo || isAudio || isRaw;
   const rangeHeader = req.headers.get("range");
 
-  // Cache hit?
-  const cached = await cache.getBytes(publicId);
+  // Never cache complete video/audio payloads in memory/Redis. Large media must
+  // remain range-streamed; only small image-like assets use the byte cache.
+  const cached = isVideo || isAudio ? undefined : await cache.getBytes(publicId);
   if (cached) {
     return serveBytes(cached, file.mimeType, Number(file.size), file.sha256 ?? undefined, supportsRange, rangeHeader);
   }
@@ -197,8 +198,11 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
     });
   }
 
-  // Warm cache
-  await cache.setBytes(publicId, bytes);
+  // Warm cache only for non-video/audio assets. Caching an 800 MB video in the
+  // application process/Redis defeats the bounded-range design.
+  if (!isVideo && !isAudio) {
+    await cache.setBytes(publicId, bytes);
+  }
   await cache.setMeta(publicId, {
     mimeType: file.mimeType,
     size: bytes.length,
@@ -282,7 +286,10 @@ function parseRange(header: string, size: number): { start: number; end: number 
     end = endStr === "" ? size - 1 : Number(endStr);
   }
   if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
-  if (start >= size || end >= size || start > end) return null;
+  if (size <= 0 || start >= size || start < 0 || start > end) return null;
+  // RFC 7233 permits an explicit end beyond the representation length; clamp
+  // it to the last byte instead of incorrectly returning 416.
+  end = Math.min(end, size - 1);
   return { start, end };
 }
 

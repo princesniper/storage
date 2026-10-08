@@ -66,26 +66,38 @@ async function optimizeJpeg(inputPath: string, outputPath: string) {
 }
 
 async function decodeDngToJpeg(sourcePath: string, workDir: string) {
+  const sourceBase = path.basename(sourcePath);
+
+  // First prefer an embedded camera preview. LibRaw's simple_dcraw -e writes
+  // <input>.thumb.jpg (or a bitmap/PPM variant). This is dramatically faster
+  // than full RAW demosaic and is supported for many camera/DNG variants.
   try {
-    // LibRaw's simple_dcraw -e uses the RAW container's thumbnail structures
-    // rather than guessing JPEG offsets. It can emit JPEG or bitmap thumbnails;
-    // Sharp normalizes either into the final web JPEG.
     await runCommand("simple_dcraw", ["-e", sourcePath], workDir, 90_000);
     const candidates = (await fs.readdir(workDir))
-      .filter((name) => name.startsWith(path.basename(sourcePath) + ".thumb."))
+      .filter((name) => name.startsWith(sourceBase + ".thumb."))
       .map((name) => path.join(workDir, name));
+
     for (const candidate of candidates) {
       try {
         const stat = await fs.stat(candidate);
-        if (stat.size > 1024) return { source: candidate, decoder: "libraw-embedded" };
+        if (stat.size > 1024) {
+          return { source: candidate, decoder: "libraw-embedded" };
+        }
       } catch {}
     }
-  } catch {}
+  } catch (error) {
+    logger.warn("[DNG_PREVIEW] embedded thumbnail extraction failed; falling back to demosaic", {
+      reason: error instanceof Error ? error.message.slice(0, 300) : String(error),
+    });
+  }
 
+  // No usable embedded preview: perform a real LibRaw demosaic to TIFF.
+  // Do not depend on -O filename semantics; dcraw_emu's documented output
+  // convention is <input>.tiff, which is deterministic across Debian builds.
+  const generatedTiff = `${sourcePath}.tiff`;
   const decodedTiff = path.join(workDir, "decoded.tiff");
-  // LibRaw handles DNG/RAW demosaic, camera WB and embedded camera matrices.
-  // -o 1 explicitly targets sRGB; -w uses camera WB when available.
-  await runCommand("dcraw_emu", ["-w", "-o", "1", "-T", "-O", decodedTiff, sourcePath], workDir, JOB_TIMEOUT_MS);
+  await runCommand("dcraw_emu", ["-w", "-o", "1", "-T", sourcePath], workDir, JOB_TIMEOUT_MS);
+  await fs.rename(generatedTiff, decodedTiff);
   return { source: decodedTiff, decoder: "libraw-dcraw_emu" };
 }
 
@@ -110,7 +122,9 @@ async function claimNextJob() {
       status: "active",
       extension: { in: rawExtensions() },
       OR: [
+        { previewStatus: "none" },
         { previewStatus: "pending" },
+        { previewStatus: "failed", previewRetryCount: { lt: 3 } },
         { previewStatus: "processing", previewProcessingStartedAt: { lt: staleBefore } },
       ],
     },
@@ -124,11 +138,18 @@ async function claimNextJob() {
       id: candidate.id,
       status: "active",
       OR: [
+        { previewStatus: "none" },
         { previewStatus: "pending" },
+        { previewStatus: "failed", previewRetryCount: { lt: 3 } },
         { previewStatus: "processing", previewProcessingStartedAt: { lt: staleBefore } },
       ],
     },
-    data: { previewStatus: "processing", previewProcessingStartedAt: new Date(), previewError: null },
+    data: {
+      previewStatus: "processing",
+      previewProcessingStartedAt: new Date(),
+      previewError: null,
+      previewRetryCount: { increment: 1 },
+    },
   });
   return claimed.count === 1 ? candidate.id : null;
 }
@@ -198,6 +219,7 @@ async function processOne(fileId: number) {
         previewError: null,
         previewGeneratedAt: new Date(),
         previewProcessingStartedAt: null,
+        previewRetryCount: 0,
       },
     });
 

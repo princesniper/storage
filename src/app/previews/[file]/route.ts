@@ -3,6 +3,7 @@ import { cache } from "@/lib/cache";
 import { db } from "@/lib/db";
 import { formatSequence, parseMediaFilename } from "@/lib/media-url";
 import { telegramService } from "@/services/telegram";
+import { isRawMime, isVideoMime } from "@/lib/env";
 
 interface RouteContext { params: Promise<{ file: string }> }
 
@@ -29,7 +30,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     },
   });
 
-  if (!row || row.status !== "active" || !row.mimeType.startsWith("image/x-") || row.previewStatus !== "ready" ||
+  if (!row || row.status !== "active" || (!isRawMime(row.mimeType) && !isVideoMime(row.mimeType)) || row.previewStatus !== "ready" ||
       !row.previewTelegramMessageId || !row.previewTelegramFileReference || !row.previewUrl) {
     return new Response(JSON.stringify({ error: "NOT_FOUND" }), { status: 404, headers: { "Content-Type": "application/json" } });
   }
