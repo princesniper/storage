@@ -620,11 +620,12 @@ class TelegramServiceImpl {
     const refreshed = newRef !== currentFileReferenceB64;
     await this.client.downloadMedia(fresh, {
       outputFile: outputPath,
-      fileSize: doc.size,
       progressCallback: (received, total) => {
-        if (total > 0 && received % (8 * 1024 * 1024) < 524288) {
-          logger.info("RAW source download progress", { messageId, received, total });
-        }
+        logger.debug("RAW source download progress", {
+          messageId,
+          received: String(received),
+          total: String(total),
+        });
       },
     });
     return { refreshedReferenceB64: refreshed ? newRef : undefined };
