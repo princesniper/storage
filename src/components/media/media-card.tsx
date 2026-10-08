@@ -17,6 +17,9 @@ export interface MediaFile {
   publicUrl: string;
   width: number | null;
   height: number | null;
+  previewStatus?: string;
+  previewUrl?: string | null;
+  previewError?: string | null;
   createdAt: string;
   storageChannel: { id: number; name: string };
 }
@@ -85,7 +88,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
           ) : isAudio ? (
             <div className="flex size-full items-center justify-center bg-muted/20"><Music className="size-12 text-muted-foreground/50" /></div>
           ) : isRaw ? (
-            <RawPreview src={file.publicUrl} alt={file.originalName} />
+            <RawPreview src={file.previewUrl || file.publicUrl} alt={file.originalName} status={file.previewStatus} error={file.previewError} />
           ) : (
             <img src={file.publicUrl} alt="" loading="lazy" className="size-full object-cover" />
           )}
