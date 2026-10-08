@@ -366,7 +366,7 @@ export function MediaLightbox({
             />
           ) : isRaw ? (
             <div className="flex max-h-[82dvh] max-w-[92vw] items-center justify-center rounded-xl border border-white/10 bg-black shadow-2xl overflow-hidden">
-              <RawPreview src={file.publicUrl} alt={file.originalName} className="max-h-[82dvh] max-w-[92vw] object-contain" />
+              <RawPreview src={file.previewUrl || file.publicUrl} alt={file.originalName} status={file.previewStatus} error={file.previewError} className="max-h-[82dvh] max-w-[92vw] object-contain" />
             </div>
           ) : isAudio ? (
             <div className="flex w-full max-w-2xl flex-col items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl backdrop-blur-xl">
