@@ -65,17 +65,20 @@ async function optimizeJpeg(inputPath: string, outputPath: string) {
 }
 
 async function decodeDngToJpeg(sourcePath: string, workDir: string) {
-  const embeddedBase = path.join(workDir, "embedded");
-  const embeddedJpeg = `${embeddedBase}.jpg`;
   try {
-    // dcraw's -e path is used only as an optimization. It is a real RAW/DNG
-    // thumbnail extractor, not a byte scan, so it does not assume a JPEG offset.
-    await runCommand("dcraw", ["-e", sourcePath], workDir, 90_000);
-    try {
-      await fs.access(embeddedJpeg);
-      const stat = await fs.stat(embeddedJpeg);
-      if (stat.size > 1024) return { source: embeddedJpeg, decoder: "dcraw-embedded" };
-    } catch {}
+    // LibRaw's simple_dcraw -e uses the RAW container's thumbnail structures
+    // rather than guessing JPEG offsets. It can emit JPEG or bitmap thumbnails;
+    // Sharp normalizes either into the final web JPEG.
+    await runCommand("simple_dcraw", ["-e", sourcePath], workDir, 90_000);
+    const candidates = (await fs.readdir(workDir))
+      .filter((name) => name.startsWith(path.basename(sourcePath) + ".thumb."))
+      .map((name) => path.join(workDir, name));
+    for (const candidate of candidates) {
+      try {
+        const stat = await fs.stat(candidate);
+        if (stat.size > 1024) return { source: candidate, decoder: "libraw-embedded" };
+      } catch {}
+    }
   } catch {}
 
   const decodedTiff = path.join(workDir, "decoded.tiff");
