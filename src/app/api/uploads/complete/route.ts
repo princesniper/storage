@@ -10,6 +10,7 @@ import { generatePublicId } from "@/lib/public-id";
 import { canonicalUrl } from "@/lib/media-url";
 import { isAllowedDetectedMime, isRawMime, isVideoMime, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, normalizeMimeType } from "@/lib/env";
 import { rawMimeFromName } from "@/lib/raw";
+import { triggerVideoThumbnailWorker } from "@/lib/video-thumbnail";
 import {
   assembleUpload,
   cleanupUpload,
@@ -133,6 +134,7 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
   });
 
   setTelegramUploadResult(uploadId, fileRow.publicUrl);
+  if (isVideoMime(detectedMime)) triggerVideoThumbnailWorker();
   return fileRow.publicUrl;
 }
 

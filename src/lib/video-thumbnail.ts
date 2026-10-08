@@ -98,13 +98,13 @@ async function claimNextJob() {
   return claimed.count === 1 ? candidate.id : null;
 }
 
-async function processOne(fileId: number) {
+async function processOne(fileId: number): Promise<boolean> {
   const file = await db.file.findUnique({
     where: { id: fileId },
     include: { storageChannel: { select: { telegramChannelId: true } } },
   });
-  if (!file || file.status !== "active" || !file.mimeType.startsWith("video/")) return;
-  if (file.previewStatus === "ready" && file.previewUrl) return;
+  if (!file || file.status !== "active" || !file.mimeType.startsWith("video/")) return false;
+  if (file.previewStatus === "ready" && file.previewUrl) return true;
 
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), "growplants-video-"));
   const sourcePath = path.join(workDir, "original.video");
@@ -118,40 +118,106 @@ async function processOne(fileId: number) {
   });
 
   try {
-    const downloaded = await telegramService.downloadFileToPath(
+    const telegramStartedAt = Date.now();
+    let sourceBytes = 0;
+    let sourceMode = "telegram-thumbnail";
+
+    // Fast path: Telegram may already have generated a document thumbnail.
+    // This avoids touching the original video bytes entirely.
+    const telegramThumb = await telegramService.downloadVideoThumbnail(
       file.storageChannel.telegramChannelId,
       file.telegramMessageId,
-      file.telegramFileReference,
-      sourcePath,
-      file.telegramAccessHash,
     );
+    if (telegramThumb) {
+      await fs.writeFile(sourcePath, telegramThumb);
+      sourceBytes = telegramThumb.length;
+      sourceMode = "telegram-thumbnail";
+      await runCommand(
+        "ffmpeg",
+        [
+          "-hide_banner", "-loglevel", "error",
+          "-i", sourcePath,
+          "-frames:v", "1",
+          "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
+          "-q:v", String(THUMB_QUALITY),
+          "-y", outputPath,
+        ],
+        workDir,
+        60_000,
+      );
+    } else {
+      // Second path: fetch only a small bounded prefix and let FFmpeg attempt
+      // to decode an early frame. This avoids the old unconditional full-file
+      // download for formats whose metadata is available near the head.
+      sourceMode = "partial-prefix";
+      const partial = await telegramService.downloadFilePrefixToPath(
+        file.storageChannel.telegramChannelId,
+        file.telegramMessageId,
+        file.telegramFileId,
+        file.telegramAccessHash,
+        file.telegramFileReference,
+        sourcePath,
+        8 * 1024 * 1024,
+      );
+      sourceBytes = partial.bytes;
+      if (partial.refreshedReferenceB64) {
+        await db.file.update({ where: { id: file.id }, data: { telegramFileReference: partial.refreshedReferenceB64 } });
+      }
 
-    if (downloaded.refreshedReferenceB64) {
-      await db.file.update({
-        where: { id: file.id },
-        data: { telegramFileReference: downloaded.refreshedReferenceB64 },
-      });
+      try {
+        await runCommand(
+          "ffmpeg",
+          [
+            "-hide_banner", "-loglevel", "error",
+            "-ss", "0.5",
+            "-i", sourcePath,
+            "-frames:v", "1",
+            "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
+            "-q:v", String(THUMB_QUALITY),
+            "-y", outputPath,
+          ],
+          workDir,
+          60_000,
+        );
+      } catch {
+        // Some MP4/MOV files place moov at the end. Keep this a controlled
+        // fallback, not the default path; never hold the full video in RAM.
+        sourceMode = "full-source-fallback";
+        const downloaded = await telegramService.downloadFileToPath(
+          file.storageChannel.telegramChannelId,
+          file.telegramMessageId,
+          file.telegramFileReference,
+          sourcePath,
+          file.telegramAccessHash,
+        );
+        const stat = await fs.stat(sourcePath);
+        sourceBytes = stat.size;
+        if (downloaded.refreshedReferenceB64) {
+          await db.file.update({ where: { id: file.id }, data: { telegramFileReference: downloaded.refreshedReferenceB64 } });
+        }
+        const duration = await probeDuration(sourcePath);
+        const seek = duration <= 0 ? 0 : Math.min(1.5, Math.max(0, duration * 0.1));
+        await runCommand(
+          "ffmpeg",
+          [
+            "-hide_banner", "-loglevel", "error",
+            "-ss", seek.toFixed(3), "-i", sourcePath,
+            "-frames:v", "1",
+            "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
+            "-q:v", String(THUMB_QUALITY), "-y", outputPath,
+          ],
+          workDir,
+          JOB_TIMEOUT_MS,
+        );
+      }
     }
 
-    const duration = await probeDuration(sourcePath);
-    const seek = duration <= 0 ? 0 : Math.min(1.5, Math.max(0, duration * 0.25));
-
-    await runCommand(
-      "ffmpeg",
-      [
-        "-hide_banner",
-        "-loglevel", "error",
-        "-ss", seek.toFixed(3),
-        "-i", sourcePath,
-        "-frames:v", "1",
-        "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
-        "-q:v", String(THUMB_QUALITY),
-        "-y",
-        outputPath,
-      ],
-      workDir,
-      JOB_TIMEOUT_MS,
-    );
+    logger.info("[VIDEO_THUMBNAIL] source-ready", {
+      fileId: file.id,
+      sourceMode,
+      sourceBytes,
+      sourceMs: Date.now() - telegramStartedAt,
+    });
 
     const stat = await fs.stat(outputPath);
     if (stat.size <= 0) throw new Error("EMPTY_VIDEO_THUMBNAIL");
@@ -188,16 +254,17 @@ async function processOne(fileId: number) {
 
     if (updated.count !== 1) {
       try { await telegramService.deleteMessage(file.storageChannel.telegramChannelId, upload.messageId); } catch {}
-      return;
+      return false;
     }
 
     logger.info("[VIDEO_THUMBNAIL] completed", {
       fileId: file.id,
-      durationSeconds: duration,
-      seekSeconds: seek,
+      sourceMode,
+      sourceBytes,
       outputSize: stat.size,
       durationMs: Date.now() - startedAt,
     });
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error("[VIDEO_THUMBNAIL] failed", {
@@ -213,6 +280,7 @@ async function processOne(fileId: number) {
         previewProcessingStartedAt: null,
       },
     });
+    return false;
   } finally {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
@@ -222,7 +290,7 @@ async function workerLoop() {
   if (running) return;
   running = true;
   try {
-    const jobs: Promise<void>[] = [];
+    const jobs: Promise<boolean>[] = [];
     for (let i = 0; i < concurrency(); i += 1) {
       const id = await claimNextJob();
       if (id == null) break;
@@ -232,6 +300,58 @@ async function workerLoop() {
   } finally {
     running = false;
   }
+}
+
+export function triggerVideoThumbnailWorker() {
+  if (process.env.NODE_ENV !== "production") return;
+  void workerLoop();
+}
+
+export async function runVideoThumbnailBackfill(options?: {
+  limit?: number;
+  concurrency?: number;
+  dryRun?: boolean;
+}) {
+  const limit = Math.max(0, options?.limit ?? Number.POSITIVE_INFINITY);
+  const dryRun = options?.dryRun ?? false;
+  if (dryRun) {
+    return db.file.count({
+      where: {
+        status: "active",
+        mimeType: { startsWith: "video/" },
+        OR: [
+          { previewStatus: "none" },
+          { previewStatus: "pending" },
+          { previewStatus: "failed", previewRetryCount: { lt: 3 } },
+          { previewStatus: "processing", previewProcessingStartedAt: { lt: new Date(Date.now() - STALE_MS) } },
+        ],
+      },
+    });
+  }
+
+  let processed = 0;
+  let success = 0;
+  let failed = 0;
+  const workers = Math.max(1, Math.min(2, options?.concurrency ?? 1));
+
+  while (processed < limit) {
+    const jobs: Promise<{ id: number; ok: boolean }>[] = [];
+    for (let i = 0; i < workers && processed + i < limit; i += 1) {
+      const id = await claimNextJob();
+      if (id == null) break;
+      jobs.push(processOne(id).then((ok) => ({ id, ok })).catch(() => ({ id, ok: false })));
+    }
+    if (!jobs.length) break;
+    const results = await Promise.all(jobs);
+    for (const result of results) {
+      processed += 1;
+      if (result.ok) success += 1;
+      else failed += 1;
+    }
+    logger.info("[VIDEO_THUMBNAIL] backfill-progress", { processed, success, failed, limit });
+  }
+
+  return { processed, success, failed };
 }
 
 export function startVideoThumbnailWorker() {

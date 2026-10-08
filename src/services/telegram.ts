@@ -477,8 +477,10 @@ class TelegramServiceImpl {
     if (!this.client) throw new Error(this.notConnectedMessage());
     const peer = await this.resolvePeer(peerId);
     const telegramFile = new CustomFile(originalName, fileSize, filePath);
-    // GramJS defaults to one upload worker. Keep concurrency bounded to improve
-    // large-file throughput without using an unstable/high worker count.
+    const isVideo = /\.(mp4|m4v|mov|webm|mkv|avi)$/i.test(originalName);
+    // Let Telegram classify supported video uploads as videos so it can create
+    // a native document thumbnail and mark MP4/MOV media as streamable.
+    // Existing non-video files remain documents exactly as before.
     const configuredWorkers = Number.parseInt(process.env.TELEGRAM_UPLOAD_WORKERS ?? "8", 10);
     const workers = Number.isFinite(configuredWorkers)
       ? Math.max(1, Math.min(8, configuredWorkers))
@@ -499,7 +501,8 @@ class TelegramServiceImpl {
             if (uploadId) setTelegramUploadProgress(uploadId, Math.round(progress * 100), "telegram");
           },
           caption: originalName,
-          forceDocument: true,
+          forceDocument: !isVideo,
+          supportsStreaming: isVideo,
           fileSize,
           workers,
         });
@@ -685,14 +688,122 @@ class TelegramServiceImpl {
   }
 
   /**
-   * Download only a byte range from a Telegram document. GramJS exposes
-   * iterDownload for chunked/ranged reads; use the document's BigInteger
-   * value to construct the required offset without adding another runtime
-   * dependency to this application.
+   * Build a Telegram document location directly from the metadata already
+   * persisted on File. This avoids getMessages() on every browser Range.
+   */
+  private buildDocumentLocation(fileId: string, accessHash: string, fileReferenceB64: string) {
+    return new Api.InputDocumentFileLocation({
+      id: bigInt(fileId),
+      accessHash: bigInt(accessHash),
+      fileReference: Buffer.from(fileReferenceB64, "base64"),
+      thumbSize: "",
+    });
+  }
+
+  /** Refresh a stale Telegram file reference only when Telegram rejects it. */
+  private async refreshDocumentReference(peerId: string, messageId: number) {
+    const peer = await this.resolvePeer(peerId);
+    const msgs = await this.client!.getMessages(peer, { ids: [messageId], limit: 1 });
+    const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
+    if (!fresh) throw new Error("Message not found");
+    const media = fresh.media as (Api.MessageMediaDocument & {
+      document?: Api.Document & {
+        id: { toString(): string };
+        accessHash: { toString(): string };
+        fileReference: Buffer;
+        thumbs?: Api.TypePhotoSize[];
+      };
+    }) | undefined;
+    const doc = media?.document;
+    if (!doc) throw new Error("Message has no media document");
+    return {
+      message: fresh,
+      fileId: doc.id.toString(),
+      accessHash: doc.accessHash.toString(),
+      fileReference: doc.fileReference.toString("base64"),
+      doc,
+    };
+  }
+
+  /**
+   * Try Telegram's own generated document thumbnail first. Telegram can serve
+   * this without downloading the original video, making it the fast path.
+   */
+  async downloadVideoThumbnail(peerId: string, messageId: number): Promise<Buffer | undefined> {
+    await this.start();
+    if (this.status !== "connected" || !this.client) throw new Error(this.notConnectedMessage());
+    const fresh = await this.refreshDocumentReference(peerId, messageId);
+    const thumbs = fresh.doc.thumbs ?? [];
+    if (!thumbs.length) return undefined;
+    const largest = thumbs[thumbs.length - 1];
+    const bytes = await this.client.downloadMedia(fresh.message, { thumb: largest }) as Buffer | undefined;
+    return bytes && bytes.length > 0 ? bytes : undefined;
+  }
+
+  /**
+   * Download only a bounded prefix for thumbnail extraction. This is a fallback
+   * when Telegram has no usable generated thumbnail. The caller can then try
+   * FFmpeg without materializing the full source video in Node memory.
+   */
+  async downloadFilePrefixToPath(
+    peerId: string,
+    messageId: number,
+    fileId: string,
+    accessHash: string,
+    currentFileReferenceB64: string,
+    outputPath: string,
+    maxBytes = 8 * 1024 * 1024,
+  ): Promise<{ bytes: number; refreshedReferenceB64?: string }> {
+    await this.start();
+    if (this.status !== "connected" || !this.client) throw new Error(this.notConnectedMessage());
+    const requestSize = 512 * 1024;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try {
+        const location = this.buildDocumentLocation(fileId, accessHash, currentFileReferenceB64);
+        const handle = await fs.open(outputPath, "w");
+        try {
+          let received = 0;
+          for await (const chunk of this.client.iterDownload({
+            file: location,
+            offset: bigInt(0),
+            limit: Math.ceil(maxBytes / requestSize),
+            requestSize,
+            fileSize: bigInt(maxBytes),
+          })) {
+            const bytes = Buffer.from(chunk);
+            const take = Math.min(bytes.length, maxBytes - received);
+            if (take <= 0) break;
+            await handle.write(bytes.subarray(0, take));
+            received += take;
+            if (received >= maxBytes) break;
+          }
+          return { bytes: received };
+        } finally {
+          await handle.close();
+        }
+      } catch (error) {
+        if (attempt === 1) {
+          const fresh = await this.refreshDocumentReference(peerId, messageId);
+          currentFileReferenceB64 = fresh.fileReference;
+          fileId = fresh.fileId;
+          accessHash = fresh.accessHash;
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("VIDEO_PREFIX_DOWNLOAD_FAILED");
+  }
+
+  /**
+   * Download only a byte range from a Telegram document. Uses persisted
+   * document metadata directly; getMessages() is only used after a stale
+   * file-reference error.
    */
   async downloadFileRange(
     peerId: string,
     messageId: number,
+    fileId: string,
     currentFileReferenceB64: string,
     start: number,
     end: number,
@@ -709,51 +820,25 @@ class TelegramServiceImpl {
     const requestSize = 512 * 1024;
     const rangeLength = end - start + 1;
     let lastError: unknown = null;
+    let activeFileId = fileId;
+    let activeAccessHash = accessHash ?? "";
+    let activeReference = currentFileReferenceB64;
 
-    // Telegram can return transient upload.GetFile timeouts while serving many
-    // browser Range requests. Retry the bounded range instead of turning a
-    // single transient Telegram timeout into a 502 for the video player.
+    // Browser Range requests should use persisted Telegram document metadata
+    // directly. getMessages() is a slow control-plane operation and is only
+    // needed when Telegram rejects an expired file reference.
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {
-        if (!this.client || this.status !== "connected") {
-          await this.ensureConnectedClient(true);
-        }
+        if (!this.client || this.status !== "connected") await this.ensureConnectedClient(true);
         if (!this.client) throw new Error(this.notConnectedMessage());
+        if (!activeAccessHash) throw new Error("TELEGRAM_ACCESS_HASH_MISSING");
 
-        const peer = await this.resolvePeer(peerId);
-        const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
-        const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
-        if (!fresh) throw new Error("Message not found");
-
-        const media = fresh.media as
-          | (Api.MessageMediaDocument & {
-              document?: Api.Document & {
-                id: { toString(): string };
-                accessHash: { toString(): string };
-                fileReference: Buffer;
-              };
-            })
-          | undefined;
-        const doc = media?.document;
-        if (!doc) throw new Error("Message has no media document");
-
-        const newRef = doc.fileReference.toString("base64");
-        const refreshed = newRef !== currentFileReferenceB64;
-        const location = new Api.InputDocumentFileLocation({
-          id: doc.id,
-          accessHash: doc.accessHash,
-          fileReference: doc.fileReference,
-          thumbSize: "",
-        });
-
-        // Telegram upload.getFile requires byte offsets to be 4 KiB aligned.
-        // Browser Range requests can start at any byte, so fetch from the
-        // previous aligned boundary and trim the leading bytes afterwards.
+        const location = this.buildDocumentLocation(activeFileId, activeAccessHash, activeReference);
         const alignedStart = Math.floor(start / 4096) * 4096;
         const leadingBytes = start - alignedStart;
         const bytesToFetch = leadingBytes + rangeLength;
         const chunkLimit = Math.ceil(bytesToFetch / requestSize);
-        const offset = doc.size.subtract(doc.size).add(alignedStart);
+        const offset = bigInt(alignedStart);
         const chunks: Buffer[] = [];
         let remaining = bytesToFetch;
 
@@ -762,41 +847,41 @@ class TelegramServiceImpl {
           offset,
           limit: chunkLimit,
           requestSize,
-          fileSize: doc.size,
         })) {
           if (remaining <= 0) break;
-          const take = Math.min(chunk.length, remaining);
+          const bytes = Buffer.from(chunk);
+          const take = Math.min(bytes.length, remaining);
           if (take > 0) {
-            chunks.push(chunk.subarray(0, take));
+            chunks.push(bytes.subarray(0, take));
             remaining -= take;
           }
         }
 
         const fetchedBytes = Buffer.concat(chunks);
         const bytes = fetchedBytes.subarray(leadingBytes, leadingBytes + rangeLength);
-        if (bytes.length !== rangeLength) {
-          throw new Error(`RANGE_INCOMPLETE:${bytes.length}/${rangeLength}`);
-        }
+        if (bytes.length !== rangeLength) throw new Error(`RANGE_INCOMPLETE:${bytes.length}/${rangeLength}`);
 
         return {
           bytes,
-          refreshedReferenceB64: refreshed ? newRef : undefined,
+          refreshedReferenceB64: activeReference !== currentFileReferenceB64 ? activeReference : undefined,
         };
       } catch (error) {
         lastError = error;
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn("Telegram range download retry", {
-          messageId,
-          start,
-          end,
-          attempt,
-          reason: message.slice(0, 300),
-        });
+        logger.warn("Telegram range download retry", { messageId, start, end, attempt, reason: message.slice(0, 300) });
         if (attempt < 3) {
+          if (/FILE_REFERENCE|FILE_REFERENCE_EXPIRED|FILEREF|RPC_CALL_FAIL|TIMEOUT|CONNECTION|AUTH_KEY/i.test(message)) {
+            try {
+              const fresh = await this.refreshDocumentReference(peerId, messageId);
+              activeFileId = fresh.fileId;
+              activeAccessHash = fresh.accessHash;
+              activeReference = fresh.fileReference;
+            } catch {}
+          }
           if (!this.client?.connected || /TIMEOUT|CONNECTION|AUTH_KEY/i.test(message)) {
             try { await this.ensureConnectedClient(true); } catch {}
           }
-          await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+          await new Promise((resolve) => setTimeout(resolve, attempt * 250));
         }
       }
     }

@@ -36,6 +36,7 @@ export interface ServableFile {
   status: string;
   sha256: string | null;
   telegramMessageId: number;
+  telegramFileId: string;
   telegramAccessHash: string | null;
   telegramFileReference: string;
   storageChannel: { telegramChannelId: string };
@@ -52,6 +53,7 @@ export async function loadFileBySequence(sequenceNumber: number): Promise<Servab
       status: true,
       sha256: true,
       telegramMessageId: true,
+      telegramFileId: true,
       telegramAccessHash: true,
       telegramFileReference: true,
       storageChannel: { select: { telegramChannelId: true } },
@@ -118,6 +120,7 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
       const result = await telegramService.downloadFileRange(
         file.storageChannel.telegramChannelId,
         file.telegramMessageId,
+        file.telegramFileId,
         file.telegramFileReference,
         parsed.start,
         requestedEnd,
