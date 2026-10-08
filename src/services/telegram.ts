@@ -295,17 +295,17 @@ class TelegramServiceImpl {
     this.client = null;
     this.status = "disconnected";
     this.pending2FA = null;
+
+    // Disconnect is reversible. Keep the encrypted Telegram session so the
+    // same account can reconnect without destroying its authentication state.
+    // File/folder/channel records are never touched here.
     await db.telegramAccount.updateMany({
       data: {
         status: "disconnected",
-        sessionCipher: null,
-        sessionIV: null,
-        sessionAuthTag: null,
-        phoneReference: null,
         lastError: null,
       },
     });
-    logger.info("TelegramService: disconnected and session cleared");
+    logger.info("TelegramService: disconnected; encrypted session preserved");
   }
 
   /**
