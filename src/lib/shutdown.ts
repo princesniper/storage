@@ -111,6 +111,8 @@ async function beginShutdown(signal: string): Promise<void> {
     process.exit(1);
   }
   shuttingDown = true;
+  const { stopDngPreviewWorker } = await import("./dng-preview");
+  await stopDngPreviewWorker();
   const budget = drainBudgetMs();
   logger.warn("shutdown signal received, draining active requests", { signal, budgetMs: budget });
   const clean = await drainServers(budget);
