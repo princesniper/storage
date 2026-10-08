@@ -10,14 +10,14 @@ import { telegramService } from "@/services/telegram";
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
-  await telegramService.ensureStarted();
-  const account = await (await import("@/lib/db")).db.telegramAccount.findFirst({
-    orderBy: { updatedAt: "desc" },
-  });
-  const hasStoredSession = Boolean(
-    account?.sessionCipher && account.sessionIV && account.sessionAuthTag
-  );
-  const status = hasStoredSession && telegramService.getStatus() === "connected"
+  // Do not reboot an already-authenticated in-memory client. During the
+  // OTP flow (and in local development) the authenticated session may be
+  // intentionally kept outside the production DB.
+  if (telegramService.getStatus() !== "connected") {
+    await telegramService.ensureStarted();
+  }
+
+  const status = telegramService.getStatus() === "connected"
     ? "connected"
     : "disconnected";
   const connected = status === "connected";

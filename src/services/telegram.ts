@@ -224,6 +224,10 @@ class TelegramServiceImpl {
     this.lastError = null;
 
     const result = await this.ensureFreshClient(normalizedPhone);
+    // The fresh OTP client now owns the service lifecycle. Keep the boot
+    // promise resolved so status/health requests cannot start a second
+    // TelegramClient and overwrite this authenticated flow.
+    this.bootPromise = Promise.resolve();
     this.pending2FA = { phoneCodeHash: result.phoneCodeHash, phone: normalizedPhone };
     return result;
   }
