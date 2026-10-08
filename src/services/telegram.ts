@@ -153,8 +153,14 @@ class TelegramServiceImpl {
       const acc = await db.telegramAccount.findFirst({
         orderBy: { updatedAt: "desc" },
       });
-      if (!acc || !acc.sessionCipher || !acc.sessionIV || !acc.sessionAuthTag) {
-        logger.info("TelegramService: no stored session, waiting for connect");
+      if (
+        !acc ||
+        acc.status !== "connected" ||
+        !acc.sessionCipher ||
+        !acc.sessionIV ||
+        !acc.sessionAuthTag
+      ) {
+        logger.info("TelegramService: no active stored connection, waiting for connect");
         this.status = "disconnected";
         return;
       }

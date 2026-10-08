@@ -13,13 +13,12 @@ export default async function SettingsPage() {
   const tg = await db.telegramAccount.findFirst({
     orderBy: { updatedAt: "desc" },
   });
-  const hasStoredSession = Boolean(
-    tg?.sessionCipher && tg.sessionIV && tg.sessionAuthTag
-  );
-  const tgStatus =
-    hasStoredSession && telegramService.getStatus() === "connected"
-      ? "connected"
-      : "disconnected";
+  // The service is the source of truth for the live connection. In local
+  // development the authenticated session is intentionally file-backed, so
+  // the database does not contain the session fields.
+  const tgStatus = telegramService.getStatus() === "connected"
+    ? "connected"
+    : "disconnected";
   const tgError = tgStatus === "connected" ? null : telegramService.getLastError();
 
   return (
