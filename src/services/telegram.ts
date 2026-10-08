@@ -592,6 +592,45 @@ class TelegramServiceImpl {
   }
 
   /**
+   * Download a Telegram document directly to a temporary/server-side path.
+   * This is used by RAW preview generation so an 800 MB original is never
+   * materialized as one giant Node Buffer.
+   */
+  async downloadFileToPath(
+    peerId: string,
+    messageId: number,
+    currentFileReferenceB64: string,
+    outputPath: string,
+    accessHash?: string
+  ): Promise<{ refreshedReferenceB64?: string }> {
+    await this.start();
+    if (this.status !== "connected" || !this.client) {
+      throw new Error(this.notConnectedMessage());
+    }
+    const peer = await this.resolvePeer(peerId);
+    const msgs = await this.client.getMessages(peer, { ids: [messageId], limit: 1 });
+    const fresh = Array.isArray(msgs) ? msgs[0] : msgs;
+    if (!fresh) throw new Error("Message not found");
+    const media = fresh.media as
+      | (Api.MessageMediaDocument & { document?: Api.Document & { fileReference: Buffer } })
+      | undefined;
+    const doc = media?.document;
+    if (!doc) throw new Error("Message has no media document");
+    const newRef = doc.fileReference.toString("base64");
+    const refreshed = newRef !== currentFileReferenceB64;
+    await this.client.downloadMedia(fresh, {
+      outputFile: outputPath,
+      fileSize: doc.size,
+      progressCallback: (received, total) => {
+        if (total > 0 && received % (8 * 1024 * 1024) < 524288) {
+          logger.info("RAW source download progress", { messageId, received, total });
+        }
+      },
+    });
+    return { refreshedReferenceB64: refreshed ? newRef : undefined };
+  }
+
+  /**
    * Download only a byte range from a Telegram document. GramJS exposes
    * iterDownload for chunked/ranged reads; use the document's BigInteger
    * value to construct the required offset without adding another runtime
