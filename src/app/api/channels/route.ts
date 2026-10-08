@@ -75,11 +75,10 @@ export async function POST(req: Request) {
     where: { telegramChannelId: parsed.destinationId },
   });
 
-  if (existing?.status === "active") {
-    return NextResponse.json({ error: "CHANNEL_ALREADY_REGISTERED" }, { status: 409 });
-  }
-
-  // Verify access to the channel
+  // Existing records are intentionally idempotent. Reconnecting the same
+  // Telegram channel must reuse its original database row rather than create
+  // a new row and orphan the existing File/Folder index.
+  // Verify access to the channel before reactivating/reusing it.
   const test = await telegramService.testChannel(parsed.destinationId);
   if (!test.ok) {
     return NextResponse.json(
