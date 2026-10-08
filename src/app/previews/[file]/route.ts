@@ -37,7 +37,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
   const key = `preview:${formatSequence(parsed.sequenceNumber)}`;
   const cached = await cache.getBytes(key);
   if (cached) {
-    return new Response(cached, {
+    return new Response(new Uint8Array(cached), {
       status: 200,
       headers: {
         "Content-Type": "image/jpeg",
@@ -65,7 +65,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
     if (result.refreshedReferenceB64) {
       await db.file.update({ where: { id: row.id }, data: { previewTelegramFileReference: result.refreshedReferenceB64 } }).catch(() => {});
     }
-    return new Response(result.bytes, {
+    return new Response(new Uint8Array(result.bytes), {
       status: 200,
       headers: {
         "Content-Type": "image/jpeg",
