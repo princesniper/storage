@@ -149,7 +149,7 @@ async function processOne(fileId: number) {
   logger.info("[DNG_PREVIEW] started", { fileId: file.id });
 
   try {
-    await withTimeout(
+    const downloaded = await withTimeout(
       telegramService.downloadFileToPath(
         file.storageChannel.telegramChannelId,
         file.telegramMessageId,
@@ -159,6 +159,12 @@ async function processOne(fileId: number) {
       ),
       JOB_TIMEOUT_MS
     );
+    if (downloaded.refreshedReferenceB64) {
+      await db.file.update({
+        where: { id: file.id },
+        data: { telegramFileReference: downloaded.refreshedReferenceB64 },
+      });
+    }
 
     const decoded = await withTimeout(decodeDngToJpeg(sourcePath, workDir), JOB_TIMEOUT_MS);
     const jpeg = await withTimeout(optimizeJpeg(decoded.source, outputPath), 90_000);
