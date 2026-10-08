@@ -108,6 +108,7 @@ model File {
   previewError           String?
   previewGeneratedAt     DateTime?
   previewProcessingStartedAt DateTime?
+  previewRetryCount       Int       @default(0)
   // Optional folder membership. Null means the file is in the root.
   folderId               Int?
   folder                  Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
