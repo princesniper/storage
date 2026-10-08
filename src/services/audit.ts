@@ -12,6 +12,7 @@ export type AuditOperation =
   | "UPLOAD"
   | "DELETE"
   | "CHANNEL_ADD"
+  | "CHANNEL_RECONNECT"
   | "CHANNEL_DELETE"
   | "CHANNEL_TEST"
   | "CHANNEL_UPDATE"
