@@ -68,11 +68,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "STORAGE_NOT_CONNECTED" }, { status: 400 });
   }
 
-  // Uniqueness check
-  const dup = await db.storageChannel.findFirst({
+  // A channel may have been removed from the UI previously. Never create a
+  // second record for the same Telegram channel: reactivate the existing
+  // record so its File rows and Folder relationships become visible again.
+  const existing = await db.storageChannel.findFirst({
     where: { telegramChannelId: parsed.destinationId },
   });
-  if (dup) {
+
+  if (existing?.status === "active") {
     return NextResponse.json({ error: "CHANNEL_ALREADY_REGISTERED" }, { status: 409 });
   }
 
@@ -91,24 +94,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "NO_STORAGE_ACCOUNT" }, { status: 400 });
   }
 
-  const channel = await db.storageChannel.create({
-    data: {
-      telegramAccountId: acc.id,
-      name: parsed.name,
-      telegramChannelId: parsed.destinationId,
-      purpose: parsed.purpose ?? null,
-      status: "active",
-      lastTestedAt: new Date(),
-      lastTestOk: true,
-      lastTestLatencyMs: test.latencyMs,
-    },
-  });
+  const channel = existing
+    ? await db.storageChannel.update({
+        where: { id: existing.id },
+        data: {
+          telegramAccountId: acc.id,
+          name: parsed.name,
+          purpose: parsed.purpose ?? existing.purpose,
+          status: "active",
+          lastTestedAt: new Date(),
+          lastTestOk: true,
+          lastTestLatencyMs: test.latencyMs,
+          lastTestError: null,
+        },
+      })
+    : await db.storageChannel.create({
+        data: {
+          telegramAccountId: acc.id,
+          name: parsed.name,
+          telegramChannelId: parsed.destinationId,
+          purpose: parsed.purpose ?? null,
+          status: "active",
+          lastTestedAt: new Date(),
+          lastTestOk: true,
+          lastTestLatencyMs: test.latencyMs,
+        },
+      });
 
   await audit({
-    operation: "CHANNEL_ADD",
+    operation: existing ? "CHANNEL_RECONNECT" : "CHANNEL_ADD",
     status: "SUCCESS",
     ip,
-    metadata: { channelId: channel.id, name: channel.name },
+    metadata: {
+      channelId: channel.id,
+      name: channel.name,
+      telegramChannelId: channel.telegramChannelId,
+      restoredExistingData: Boolean(existing),
+    },
   });
 
   return NextResponse.json({ channel }, { status: 201 });
