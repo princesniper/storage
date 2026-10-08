@@ -24,6 +24,20 @@ const statements = [
 
 try {
   const prismaBin = "node_modules/prisma/build/index.js";
+  // Recover a previously failed migration record before retrying deploy.
+  // This is safe for fresh databases too: resolve exits non-zero when there is
+  // no failed record, and we intentionally ignore that case.
+  try {
+    await execFileAsync(
+      process.execPath,
+      [prismaBin, "migrate", "resolve", "--rolled-back", "20261008183000_add_dng_preview_columns"],
+      { cwd: process.cwd(), maxBuffer: 1024 * 1024 },
+    );
+    console.log("[DNG_PREVIEW_SCHEMA] reconciled previous failed migration");
+  } catch {
+    // No failed migration to reconcile; continue with normal deploy.
+  }
+
   await execFileAsync(process.execPath, [prismaBin, "migrate", "deploy"], { cwd: process.cwd(), maxBuffer: 1024 * 1024 });
   for (const sql of statements) await db.$executeRawUnsafe(sql);
   console.log("[DNG_PREVIEW_SCHEMA] schema ready");
