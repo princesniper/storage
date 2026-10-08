@@ -103,6 +103,7 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
           telegramFileReference: upload.fileReference,
           publicUrl: canonicalUrl(seq.id, detectedMime),
           status: "active",
+          previewStatus: isRawMime(detectedMime) ? "pending" : "none",
         },
         include: { storageChannel: { select: { id: true, name: true } }, folder: { select: { id: true, name: true } } },
       });
