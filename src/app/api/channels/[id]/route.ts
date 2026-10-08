@@ -71,15 +71,36 @@ export async function DELETE(req: Request, ctx: RouteContext) {
   const existing = await db.storageChannel.findUnique({ where: { id: Number(id) } });
   if (!existing) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
-  // Soft delete — keep file mappings intact so existing public URLs keep serving
-  await db.storageChannel.delete({ where: { id: existing.id } });
+  // IMPORTANT: never hard-delete a storage channel.
+  // File rows reference this channel, and folders reference those files.
+  // Deleting the channel with Prisma's CASCADE relation would permanently
+  // delete the entire file index. Marking it inactive preserves every File,
+  // Folder relationship, sequence number, checksum, preview and public URL.
+  const updated = await db.storageChannel.update({
+    where: { id: existing.id },
+    data: {
+      status: "inactive",
+      lastTestOk: false,
+      lastTestError: "Storage channel disconnected",
+    },
+  });
 
   await audit({
     operation: "CHANNEL_DELETE",
     status: "SUCCESS",
     ip,
-    metadata: { channelId: existing.id, name: existing.name, telegramChannelId: existing.telegramChannelId },
+    metadata: {
+      channelId: updated.id,
+      name: updated.name,
+      telegramChannelId: updated.telegramChannelId,
+      action: "SOFT_DELETE",
+      dataPreserved: true,
+    },
   });
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({
+    success: true,
+    preserved: true,
+    reconnectable: true,
+  });
 }
