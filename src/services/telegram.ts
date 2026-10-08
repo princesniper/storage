@@ -814,15 +814,39 @@ class TelegramServiceImpl {
 
   private async ensureConnectedClient(forceReconnect = false): Promise<void> {
     await this.ensureBooted();
-    if (!forceReconnect && this.client && this.status === "connected" && this.client.connected) {
-      return;
+
+    // The OTP flow intentionally keeps a resolved bootPromise after login.
+    // If that long-lived GramJS client drops its socket later, bootPromise
+    // must not prevent us from reconnecting the existing client.
+    if (!forceReconnect && this.client && this.status === "connected") {
+      if (this.client.connected) return;
+
+      try {
+        await this.client.connect();
+        if (this.client.connected && await this.client.checkAuthorization()) {
+          this.lastError = null;
+          return;
+        }
+      } catch (err) {
+        this.lastError = err instanceof Error ? err.message : String(err);
+        logger.warn("TelegramService: existing client reconnect failed", {
+          err: this.lastError,
+        });
+      }
+
+      try { await this.client.disconnect(); } catch {}
+      this.client = null;
+      this.status = "disconnected";
+      this.bootPromise = null;
     }
+
     if (forceReconnect && this.client) {
       try { await this.client.disconnect(); } catch {}
       this.client = null;
       this.status = "disconnected";
       this.bootPromise = null;
     }
+
     await this.start();
     if (!this.client || this.status !== "connected" || !this.client.connected) {
       throw new Error(this.notConnectedMessage());
