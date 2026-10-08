@@ -9,6 +9,7 @@ import { canonicalPreviewUrl } from "@/lib/media-url";
 import { isRawMime } from "@/lib/env";
 import { telegramService } from "@/services/telegram";
 import { logger } from "@/lib/logger";
+import { rawExtensions } from "@/lib/raw";
 
 const PREVIEW_MAX_DIMENSION = 2048;
 const PREVIEW_QUALITY = 86;
@@ -107,7 +108,7 @@ async function claimNextJob() {
   const candidate = await db.file.findFirst({
     where: {
       status: "active",
-      mimeType: { startsWith: "image/x-" },
+      extension: { in: rawExtensions() },
       OR: [
         { previewStatus: "pending" },
         { previewStatus: "processing", previewProcessingStartedAt: { lt: staleBefore } },
