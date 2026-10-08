@@ -9,7 +9,10 @@ import { isRawFileName } from "@/lib/raw";
 // Keep each browser -> Railway request small enough for slow/mobile links.
 // One MiB still keeps an 800 MB upload within the 1024-chunk session limit.
 export const RESUMABLE_CHUNK_SIZE = 256 * 1024;
-export const RAW_RESUMABLE_CHUNK_SIZE = 64 * 1024;
+// RAW/DNG uses the same 256 KiB browser chunk size as the generic resumable
+// uploader. Keeping one chunk size across client + session + chunk endpoint
+// prevents stale/client-version mismatches while still keeping requests small.
+export const RAW_RESUMABLE_CHUNK_SIZE = RESUMABLE_CHUNK_SIZE;
 
 export type UploadManifest = {
   uploadId: string;
