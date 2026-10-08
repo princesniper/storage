@@ -16,6 +16,7 @@ const statements = [
   'ALTER TABLE "File" ADD COLUMN IF NOT EXISTS "previewError" TEXT',
   'ALTER TABLE "File" ADD COLUMN IF NOT EXISTS "previewGeneratedAt" TIMESTAMP(3)',
   'ALTER TABLE "File" ADD COLUMN IF NOT EXISTS "previewProcessingStartedAt" TIMESTAMP(3)',
+  'ALTER TABLE "File" ADD COLUMN IF NOT EXISTS "previewRetryCount" INTEGER NOT NULL DEFAULT 0',
   'CREATE INDEX IF NOT EXISTS "File_previewStatus_idx" ON "File"("previewStatus")',
 ];
 
