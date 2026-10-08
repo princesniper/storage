@@ -618,17 +618,60 @@ class TelegramServiceImpl {
     if (!doc) throw new Error("Message has no media document");
     const newRef = doc.fileReference.toString("base64");
     const refreshed = newRef !== currentFileReferenceB64;
-    await this.client.downloadMedia(fresh, {
-      outputFile: outputPath,
-      progressCallback: (received, total) => {
-        logger.debug("RAW source download progress", {
-          messageId,
-          received: String(received),
-          total: String(total),
-        });
-      },
+    const location = new Api.InputDocumentFileLocation({
+      id: doc.id,
+      accessHash: doc.accessHash,
+      fileReference: doc.fileReference,
+      thumbSize: "",
     });
-    return { refreshedReferenceB64: refreshed ? newRef : undefined };
+
+    // Stream the original to disk in bounded chunks. downloadMedia() can hold
+    // a long-lived request open and is prone to connection-level timeouts on
+    // large Telegram documents. iterDownload gives us retryable chunk boundaries
+    // and keeps memory bounded.
+    const requestSize = 512 * 1024;
+    const maxAttempts = 3;
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const handle = await fs.open(outputPath, "w");
+        try {
+          let received = 0;
+          for await (const chunk of this.client.iterDownload({
+            file: location,
+            offset: bigInt(0),
+            requestSize,
+            fileSize: doc.size,
+          })) {
+            const bytes = Buffer.from(chunk);
+            await handle.write(bytes);
+            received += bytes.length;
+            if (received % (8 * 1024 * 1024) < bytes.length) {
+              logger.info("[DNG_SOURCE] download progress", {
+                messageId,
+                attempt,
+                receivedBytes: received,
+              });
+            }
+          }
+          if (received <= 0) throw new Error("download returned empty");
+          return { refreshedReferenceB64: refreshed ? newRef : undefined };
+        } finally {
+          await handle.close();
+        }
+      } catch (error) {
+        lastError = error;
+        logger.warn("[DNG_SOURCE] chunked download retry", {
+          messageId,
+          attempt,
+          reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+        });
+        if (attempt < maxAttempts) await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("RAW_SOURCE_DOWNLOAD_FAILED");
   }
 
   /**
