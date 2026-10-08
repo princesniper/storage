@@ -420,6 +420,7 @@ export async function POST(req: Request) {
           telegramFileReference: upload.fileReference,
           publicUrl,
           status: "active",
+          previewStatus: isRaw ? "pending" : "none",
         },
         include: {
           storageChannel: { select: { id: true, name: true } },
