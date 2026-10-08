@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 
 const db = new PrismaClient();
+const rawExtensions = ["cr2","cr3","nef","nrw","arw","srf","sr2","dng","raf","rw2","orf","orf2","pef","ptx","srw","x3f","iiq","3fr","mos","mef","mrw","erf","kdc","dcr","raw"];
 const dryRun = process.argv.includes("--dry-run");
 const limitArg = process.argv.find((v) => v.startsWith("--limit="));
 const batchArg = process.argv.find((v) => v.startsWith("--batch="));
@@ -13,7 +14,7 @@ try {
     const rows = await db.file.findMany({
       where: {
         status: "active",
-        mimeType: { startsWith: "image/x-" },
+        extension: { in: rawExtensions },
         OR: [
           { previewStatus: "none" },
           { previewStatus: "failed" },
