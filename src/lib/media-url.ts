@@ -141,6 +141,13 @@ export function canonicalUrl(sequenceNumber: number, mimeType: string): string {
   return `${CANONICAL_MEDIA_ORIGIN}${mediaPath(sequenceNumber, mimeType)}`;
 }
 
+/** Stable derived JPEG URL for a RAW/DNG preview. It uses the original file's
+ * sequence as a collision-safe namespace, while the preview is stored as a
+ * separate Telegram asset and never becomes a File row. */
+export function canonicalPreviewUrl(sequenceNumber: number): string {
+  return `${CANONICAL_MEDIA_ORIGIN}/previews/${formatSequence(sequenceNumber)}.jpg`;
+}
+
 /**
  * Parse an /images/ filename ("000042.jpg") → { sequenceNumber, ext }.
  * Returns null for malformed input. Leading zeros are ignored numerically.
