@@ -15,7 +15,7 @@ const PREVIEW_MAX_DIMENSION = 2048;
 const PREVIEW_QUALITY = 86;
 const JOB_POLL_MS = 5000;
 const STALE_PROCESSING_MS = 15 * 60 * 1000;
-const JOB_TIMEOUT_MS = 8 * 60 * 1000;
+const JOB_TIMEOUT_MS = 20 * 60 * 1000;
 const DEFAULT_CONCURRENCY = 1;
 
 let workerStarted = false;
@@ -216,7 +216,7 @@ async function processOne(fileId: number) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logger.error("[DNG_PREVIEW] failed", { fileId: file.id, reason: message.slice(0, 500) });
+    logger.error(`[DNG_PREVIEW] failed fileId=${file.id} reason=${message.slice(0, 500)}`);
     await db.file.updateMany({
       where: { id: file.id, previewStatus: "processing" },
       data: {
