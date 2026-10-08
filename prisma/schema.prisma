@@ -94,6 +94,20 @@ model File {
   height                 Int?
   // V2-Feature-7: publicId of the auto-generated video thumbnail File row (if any)
   thumbnailPublicId      String?
+  // Persisted DNG/RAW web preview (derived asset; original File remains untouched).
+  previewStatus          String    @default("none") // none | pending | processing | ready | failed
+  previewUrl             String?
+  previewMimeType        String?
+  previewSize            Int?
+  previewTelegramMessageId Int?
+  previewTelegramFileId  String?
+  previewTelegramAccessHash String?
+  previewTelegramFileReference String?
+  previewWidth           Int?
+  previewHeight          Int?
+  previewError           String?
+  previewGeneratedAt     DateTime?
+  previewProcessingStartedAt DateTime?
   // Optional folder membership. Null means the file is in the root.
   folderId               Int?
   folder                  Folder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
