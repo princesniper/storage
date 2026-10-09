@@ -876,7 +876,7 @@ class TelegramServiceImpl {
         const chunks = new Array<Buffer>(chunkCount);
         let nextChunkIndex = 0;
         let chunkError: unknown = null;
-        const workerCount = Math.min(4, chunkCount);
+        const workerCount = Math.min(8, chunkCount);
 
         // Telegram's iterDownload yields sequentially. Fetch a small bounded
         // group of independent aligned chunks concurrently so high-bitrate

@@ -64,7 +64,7 @@ test("Telegram range helper bounds retries and rejects incomplete byte ranges", 
   const rangeMethod = source.slice(source.indexOf("async downloadFileRange("), source.indexOf("async deleteMessage(", source.indexOf("async downloadFileRange(")));
   assert.match(rangeMethod, /attempt <= 3/);
   assert.match(rangeMethod, /iterDownload/);
-  assert.match(rangeMethod, /workerCount = Math\.min\(4, chunkCount\)/);
+  assert.match(rangeMethod, /workerCount = Math\.min\(8, chunkCount\)/);
   assert.match(rangeMethod, /Math\.floor\(start \/ requestSize\) \* requestSize/);
   assert.match(rangeMethod, /Promise\.all\(Array\.from\(\{ length: workerCount \}/);
   assert.match(rangeMethod, /RANGE_INCOMPLETE/);
