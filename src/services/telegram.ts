@@ -23,7 +23,7 @@ import { randomBytes } from "crypto";
 
 export type TelegramStatus = "disconnected" | "connecting" | "connected" | "pending_2fa" | "error";
 
-type UploadProgressState = { progress: number; stage: "telegram" | "complete" | "failed"; updatedAt: number; fileUrl?: string; error?: string };
+type UploadProgressState = { progress: number; stage: "telegram" | "complete" | "failed" | "duplicate"; updatedAt: number; fileUrl?: string; error?: string };
 const globalForUploadProgress = globalThis as unknown as { __uploadProgress?: Map<string, UploadProgressState> };
 const uploadProgress = globalForUploadProgress.__uploadProgress ?? new Map<string, UploadProgressState>();
 globalForUploadProgress.__uploadProgress = uploadProgress;
@@ -52,6 +52,10 @@ export function setTelegramUploadResult(id: string, fileUrl: string) {
 
 export function setTelegramUploadFailure(id: string, error: string) {
   uploadProgress.set(id, { progress: 0, stage: "failed", updatedAt: Date.now(), error });
+}
+
+export function setTelegramUploadDuplicate(id: string, message: string, fileUrl?: string) {
+  uploadProgress.set(id, { progress: 0, stage: "duplicate", updatedAt: Date.now(), error: message, fileUrl });
 }
 
 type Pending2FA = {

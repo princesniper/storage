@@ -33,7 +33,7 @@ const RESUMABLE_UPLOAD_THRESHOLD = 20 * 1024 * 1024;
 const IMAGE_COMPRESSION_CONCURRENCY = 2;
 
 // Upload concurrency remains unchanged. Compression is a separate local preprocessing stage.
-type ItemStatus = "pending" | "compressing" | "uploading" | "success" | "failed";
+type ItemStatus = "pending" | "compressing" | "uploading" | "success" | "skipped" | "failed";
 
 interface BatchItem {
   key: number;
@@ -50,6 +50,7 @@ interface BatchItem {
   url?: string;
   channelName?: string;
   error?: string;
+  message?: string;
   httpStatus?: number;
   retryNote?: string;
 }
@@ -141,7 +142,9 @@ export default function UploadClient() {
   }, []);
   // Revoke object URLs on unmount to avoid leaking memory
   const itemsRef = useRef<BatchItem[]>([]);
-  itemsRef.current = items;
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   useEffect(() => {
     const snapshot = itemsRef;
     return () => {
@@ -202,12 +205,16 @@ export default function UploadClient() {
             });
           },
         });
-        patchItem(item.key, {
-          status: "success",
-          progress: 100,
-          url: result.url,
-          channelName: activeChannels.find((c) => String(c.id) === channel)?.name ?? "",
-        });
+        if (result.duplicate) {
+          patchItem(item.key, { status: "skipped", progress: 0, message: result.message, url: result.url });
+        } else {
+          patchItem(item.key, {
+            status: "success",
+            progress: 100,
+            url: result.url,
+            channelName: activeChannels.find((c) => String(c.id) === channel)?.name ?? "",
+          });
+        }
       } catch (error) {
         const message = error instanceof DOMException && error.name === "AbortError"
           ? "Upload cancelled."
@@ -232,7 +239,10 @@ export default function UploadClient() {
         if (abortRef.current) { patchItem(item.key, { status: "failed", error: "Cancelled." }); resolve(); return; }
         try {
           const json = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300 && json.success) {
+          if (xhr.status >= 200 && xhr.status < 300 && json.duplicate) {
+            patchItem(item.key, { status: "skipped", progress: 0, message: json.message || "Duplicate skipped.", url: json.existingFile?.url });
+            resolve();
+          } else if (xhr.status >= 200 && xhr.status < 300 && json.success) {
             patchItem(item.key, { status: "success", progress: 100, url: json.file.url, channelName: json.file.channel?.name ?? "" });
             resolve();
           } else if (xhr.status === 429 && attempt < MAX_RETRIES_ON_429) {
@@ -281,7 +291,7 @@ export default function UploadClient() {
         : i
     )));
 
-    const snapshot = items.filter((i) => i.status !== "success");
+    const snapshot = items.filter((i) => i.status !== "success" && i.status !== "skipped");
     const upload = createLimiter(CONCURRENCY);
     const imageCompression = createLimiter(IMAGE_COMPRESSION_CONCURRENCY);
 
@@ -357,8 +367,10 @@ export default function UploadClient() {
   };
 
   const succeeded = items.filter((i) => i.status === "success");
+  const skipped = items.filter((i) => i.status === "skipped");
   const failed = items.filter((i) => i.status === "failed");
-  const allDone = items.length > 0 && !uploading && items.every((i) => i.status === "success" || i.status === "failed");
+  const completedCount = succeeded.length + skipped.length + failed.length;
+  const allDone = items.length > 0 && !uploading && items.every((i) => i.status === "success" || i.status === "skipped" || i.status === "failed");
   const singleMode = items.length === 1;
 
   const copyAll = () => {
@@ -580,6 +592,11 @@ export default function UploadClient() {
                   )}                  {item.retryNote && (
                     <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">{item.retryNote}</div>
                   )}
+                  {item.message && (
+                    <div className="mt-1.5 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-2 text-xs text-foreground/90">
+                      {item.message}
+                    </div>
+                  )}
                   {item.error && (
                     <div className="mt-1.5 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-2.5 py-2">
                       <div className="text-xs text-foreground/90">{friendlyUploadError(item.error, item.httpStatus)}</div>
@@ -608,6 +625,7 @@ export default function UploadClient() {
                   </Button>
                 )}
                 {item.status === "success" && <CheckCircle2 className="size-5 shrink-0 text-emerald-500 animate-success-pop" aria-hidden />}
+                {item.status === "skipped" && <CheckCircle2 className="size-5 shrink-0 text-amber-500" aria-hidden />}
               </div>
             ))}
           </div>
@@ -615,7 +633,7 @@ export default function UploadClient() {
 
         {uploading && (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="tabular-nums">Uploading… {succeeded.length}/{items.length} done</span>
+            <span className="tabular-nums">Uploading… {completedCount}/{items.length} done</span>
             <Button type="button" size="sm" variant="ghost" onClick={cancelAll}>Cancel</Button>
           </div>
         )}
@@ -671,7 +689,20 @@ export default function UploadClient() {
           </Card>
         )}
 
-        {/* Batch summary card — Tier 1 only when failures need attention */}
+        {singleMode && skipped.length === 1 && allDone && (
+          <Card tier="informational" className="border-amber-500/25">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckCircle2 className="size-5 text-amber-500" aria-hidden />
+                Duplicate skipped
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">{skipped[0].message}</p>
+            </CardHeader>
+            <CardContent><Button type="button" size="sm" variant="outline" onClick={resetBatch}><Plus className="size-3.5 mr-1" aria-hidden /> Upload another file</Button></CardContent>
+          </Card>
+        )}
+
+        {/* Batch summary distinguishes uploads, duplicates, and failures. */}
         {!singleMode && allDone && (
           <Card tier={failed.length > 0 ? "actionable" : "informational"} className="animate-page-enter">
             <CardHeader>
@@ -681,7 +712,7 @@ export default function UploadClient() {
                 ) : (
                   <CheckCircle2 className="size-4 text-emerald-400 animate-success-pop" aria-hidden />
                 )}
-                {succeeded.length} succeeded, {failed.length} failed
+                {succeeded.length} uploaded, {skipped.length} duplicates skipped, {failed.length} failed
               </CardTitle>
               {failed.length > 0 && (
                 <p className="text-xs text-muted-foreground mt-1">
@@ -717,10 +748,9 @@ export default function UploadClient() {
 }
 
 function UploadStatusBadge({ status }: { status: ItemStatus }) {
-  // 5-color model: pending = waiting (amber), uploading = transit (sky),
-  // success = completed (green), failed = exception (red).
-  const tone = status === "success" ? "completed" : status === "failed" ? "exception" : status === "uploading" || status === "compressing" ? "transit" : "waiting";
-  return <StatusBadge tone={tone}>{status}</StatusBadge>;
+  const tone = status === "success" ? "completed" : status === "skipped" ? "neutral" : status === "failed" ? "exception" : status === "uploading" || status === "compressing" ? "transit" : "waiting";
+  const label = status === "skipped" ? "duplicate skipped" : status;
+  return <StatusBadge tone={tone}>{label}</StatusBadge>;
 }
 
 function StepDot({ n, label, done }: { n: number; label: string; done: boolean }) {

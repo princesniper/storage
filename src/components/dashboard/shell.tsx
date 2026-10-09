@@ -20,6 +20,14 @@ import {
   WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useLocalStorageState } from "@/hooks/use-local-storage-state";
@@ -76,12 +84,30 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
   const collapsed = collapsedRaw === "1";
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
   const storageStatus = useStorageStatus();
 
   const toggleCollapsed = () => setCollapsedRaw(collapsed ? "0" : "1");
   const adminEmail = (session?.user as { email?: string } | undefined)?.email ?? "";
   const adminInitial = adminEmail ? adminEmail[0].toUpperCase() : "A";
-  const handleSignOut = () => signOut({ callbackUrl: "https://growplants-media.up.railway.app/login" });
+  const requestSignOut = () => {
+    setSignOutError("");
+    setSignOutOpen(true);
+  };
+  const confirmSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      const result = await signOut({ callbackUrl: "https://growplants-media.up.railway.app/login", redirect: false });
+      window.location.assign(result.url || "https://growplants-media.up.railway.app/login");
+    } catch {
+      setSignOutError("Sign out failed. Your session may still be active. Please try again.");
+      setSigningOut(false);
+    }
+  };
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -243,20 +269,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
               </TooltipTrigger>
               <TooltipContent side="right">{collapsed ? "Expand" : "Collapse"}</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 text-muted-foreground hover:text-foreground hover:bg-accent"
-                  onClick={handleSignOut}
-                  aria-label="Sign out"
-                >
-                  <LogOut className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Sign out</TooltipContent>
-            </Tooltip>
+
           </div>
         </div>
       </aside>
@@ -293,9 +306,24 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
               <kbd className="hidden lg:inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted border border-border leading-none">⌘K</kbd>
             </button>
             <ThemeToggle />
-            <Button size="icon" variant="ghost" onClick={handleSignOut} className="size-9 text-muted-foreground hover:text-foreground" aria-label="Sign out" title="Sign out">
-              <LogOut className="size-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-9 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-500" aria-label="Open account menu">
+                  <span className="text-xs font-semibold" aria-hidden>{adminInitial}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="truncate text-sm font-medium">{adminEmail || "Admin"}</div>
+                  <div className="text-xs text-muted-foreground">Administrator</div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild><Link href="/settings"><Settings className="size-4" />Account settings</Link></DropdownMenuItem>
+                <DropdownMenuItem onSelect={(event) => { event.preventDefault(); requestSignOut(); }}>
+                  <LogOut className="size-4" />Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </header>
 
@@ -365,11 +393,27 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                 <div className="text-xs font-medium truncate">{adminEmail || "Admin"}</div>
                 <div className="text-[11px] text-muted-foreground">Administrator</div>
               </div>
-              <Button size="icon" variant="ghost" className="size-9" onClick={handleSignOut} aria-label="Sign out"><LogOut className="size-4" /></Button>
+
             </div>
           </div>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={signOutOpen} onOpenChange={(open) => { if (!signingOut) setSignOutOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>Are you sure you want to sign out of GrowPlants Media?</AlertDialogDescription>
+          </AlertDialogHeader>
+          {signOutError && <p role="alert" className="text-sm text-destructive">{signOutError}</p>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={signingOut}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={() => void confirmSignOut()} disabled={signingOut}>
+              {signingOut ? "Signing out…" : "Sign out"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

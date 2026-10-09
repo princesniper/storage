@@ -122,6 +122,15 @@ model File {
   @@index([status])
   @@index([createdAt])
   @@index([folderId])
+  @@index([sha256, status])
+}
+
+model UploadReservation {
+  sha256    String   @id
+  uploadId  String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 model Folder {

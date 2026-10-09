@@ -31,7 +31,7 @@ async function jsonResponse(response: Response) {
   return json;
 }
 
-export async function resumableUpload(options: Options): Promise<{ url: string }> {
+export async function resumableUpload(options: Options): Promise<{ url: string; duplicate?: false } | { url?: string; duplicate: true; message: string }> {
   const { file, storageChannelId, folderId = null, relativePath = null, signal, onProgress } = options;
   let loadedBytes = 0;
 
@@ -114,6 +114,13 @@ export async function resumableUpload(options: Options): Promise<{ url: string }
     const json = await response.json().catch(() => ({}));
     const state = json.upload;
     if (!state) continue;
+    if (state.stage === "duplicate") {
+      return {
+        duplicate: true,
+        message: typeof state.error === "string" ? state.error : "Duplicate skipped.",
+        ...(typeof state.fileUrl === "string" ? { url: state.fileUrl } : {}),
+      };
+    }
 
     const telegramProgress = Number(state.progress) || 0;
     const now = performance.now();

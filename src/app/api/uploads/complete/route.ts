@@ -5,13 +5,15 @@ import sharp from "sharp";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { audit } from "@/services/audit";
-import { telegramService, setTelegramUploadProgress, setTelegramUploadResult, setTelegramUploadFailure } from "@/services/telegram";
+import { telegramService, setTelegramUploadProgress, setTelegramUploadResult, setTelegramUploadFailure, setTelegramUploadDuplicate } from "@/services/telegram";
 import { generatePublicId } from "@/lib/public-id";
 import { canonicalPreviewUrl, canonicalUrl } from "@/lib/media-url";
 import { isAllowedDetectedMime, isRawMime, isVideoMime, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, normalizeMimeType } from "@/lib/env";
 import { rawMimeFromName } from "@/lib/raw";
 import { generateVideoThumbnailFromPath, triggerVideoThumbnailWorker } from "@/lib/video-thumbnail";
 import { logger } from "@/lib/logger";
+import { sha256File } from "@/lib/content-hash";
+import { reserveUploadHash, releaseUploadReservation } from "@/lib/upload-dedup";
 import * as path from "path";
 import {
   assembleUpload,
@@ -50,6 +52,19 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
       : maxFileSizeBytes;
   if (manifest.size > typeLimit) {
     throw new Error(`FILE_TOO_LARGE:${Math.round(typeLimit / 1024 / 1024)}`);
+  }
+
+  // The assembled source lives on disk; stream it through SHA-256 so large
+  // videos never need a second file-sized Buffer in memory.
+  const sha256 = await sha256File(assembled);
+  const reservation = await reserveUploadHash(sha256, uploadId);
+  if (reservation.kind !== "reserved") {
+    const mediaKind = isVideoMime(detectedMime) ? "video" : detectedMime.startsWith("image/") ? "photo" : "file";
+    const message = reservation.kind === "duplicate"
+      ? `This ${mediaKind} has already been uploaded. Duplicate skipped.`
+      : `This ${mediaKind} is already being uploaded. Duplicate skipped.`;
+    setTelegramUploadDuplicate(uploadId, message, reservation.kind === "duplicate" ? reservation.file.publicUrl : undefined);
+    return null;
   }
 
   // Resolve database prerequisites before creating any Telegram messages so
@@ -173,6 +188,7 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
           mimeType: detectedMime,
           extension,
           size: manifest.size,
+          sha256,
           width,
           height,
           telegramMessageId: upload.messageId,
@@ -251,7 +267,6 @@ export async function POST(req: Request) {
 
   try {
     const assembled = await assembleUpload(uploadId);
-    setTelegramUploadProgress(uploadId, 0, "telegram");
 
     // The HTTP request ends here. Telegram transfer continues independently,
     // so a slow 800 MB upload is no longer tied to Railway's request lifecycle.
@@ -261,6 +276,7 @@ export async function POST(req: Request) {
         setTelegramUploadFailure(uploadId, message);
       })
       .finally(async () => {
+        await releaseUploadReservation(uploadId).catch(() => {});
         await cleanupUpload(uploadId).catch(() => {});
       });
 

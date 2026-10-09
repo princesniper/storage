@@ -6,9 +6,12 @@
  *     date range (ISO strings), image dimensions via sharp on upload.
  */
 import { getServerSession } from "next-auth";
+import { randomUUID } from "node:crypto";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { telegramService, setTelegramUploadProgress, clearTelegramUploadProgress } from "@/services/telegram";
+import { telegramService, setTelegramUploadProgress, clearTelegramUploadProgress, setTelegramUploadDuplicate } from "@/services/telegram";
+import { sha256Buffer } from "@/lib/content-hash";
+import { reserveUploadHash, releaseUploadReservation } from "@/lib/upload-dedup";
 import { audit } from "@/services/audit";
 import { cache } from "@/lib/cache";
 import { env, allowedMimeTypes, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isVideoMime, isAudioMime, isRawMime, isAllowedDetectedMime, normalizeMimeType } from "@/lib/env";
@@ -357,8 +360,38 @@ export async function POST(req: Request) {
     }, { status: 503 });
   }
 
-  // Upload to Telegram
+  // Hash the exact bytes that would be stored. This buffer already exists in
+  // the legacy small-upload pipeline, so hashing adds no second file-sized copy.
   const originalName = file.name || `upload-${Date.now()}`;
+  const sha256 = sha256Buffer(buf);
+  const reservationId = randomUUID();
+  let reservation;
+  try {
+    reservation = await reserveUploadHash(sha256, reservationId);
+  } catch (error) {
+    logger.error("Upload duplicate check failed closed", { err: error instanceof Error ? error.message : String(error) });
+    return NextResponse.json({ error: "DUPLICATE_CHECK_UNAVAILABLE" }, { status: 503 });
+  }
+
+  const mediaKind = isVideo ? "video" : detectedMime.startsWith("image/") ? "photo" : "file";
+  if (reservation.kind !== "reserved") {
+    const message = reservation.kind === "duplicate"
+      ? `This ${mediaKind} has already been uploaded. Duplicate skipped.`
+      : `This ${mediaKind} is already being uploaded. Duplicate skipped.`;
+    if (uploadId) setTelegramUploadDuplicate(uploadId, message, reservation.kind === "duplicate" ? reservation.file.publicUrl : undefined);
+    return NextResponse.json({
+      success: true,
+      duplicate: true,
+      inProgress: reservation.kind === "in-progress",
+      message,
+      existingFile: reservation.kind === "duplicate"
+        ? { name: reservation.file.originalName, url: reservation.file.publicUrl }
+        : undefined,
+    }, { status: 200 });
+  }
+
+  // Reserve the content hash before Telegram receives any bytes. Concurrent
+  // requests for the same content see this reservation and skip safely.
   if (uploadId) setTelegramUploadProgress(uploadId, 0, "telegram");
   let upload;
   try {
@@ -371,6 +404,7 @@ export async function POST(req: Request) {
       uploadId ?? undefined
     );
   } catch (e) {
+    await releaseUploadReservation(reservationId).catch(() => {});
     const msg = e instanceof Error ? e.message : String(e);
     logger.error("Telegram upload failed", { err: msg, channel: channel.id, size: buf.length, relativePath });
     console.error("[FolderUpload] Upload failed", { relativePath, error: msg });
@@ -396,6 +430,8 @@ export async function POST(req: Request) {
     attempts++;
   }
   if (attempts >= 5) {
+    await releaseUploadReservation(reservationId).catch(() => {});
+    await telegramService.deleteMessage(channel.telegramChannelId, upload.messageId).catch(() => {});
     logger.error("publicId collision after 5 attempts");
     return NextResponse.json({ error: "ID_GENERATION_FAILED" }, { status: 500 });
   }
@@ -410,7 +446,7 @@ export async function POST(req: Request) {
     fileRow = await db.$transaction(async (tx) => {
       const seq = await tx.mediaSequence.create({ data: {} });
       const publicUrl = canonicalUrl(seq.id, detectedMime);
-      return tx.file.create({
+      const created = await tx.file.create({
         data: {
           publicId,
           sequenceNumber: seq.id,
@@ -420,6 +456,7 @@ export async function POST(req: Request) {
           mimeType: detectedMime,
           extension: ext,
           size: buf.length,
+          sha256,
           width,
           height,
           telegramMessageId: upload.messageId,
@@ -435,6 +472,8 @@ export async function POST(req: Request) {
           folder: { select: { id: true, name: true } },
         },
       });
+      await tx.uploadReservation.deleteMany({ where: { sha256, uploadId: reservationId } });
+      return created;
     });
   } catch (e) {
     // Best-effort cleanup: try to delete the Telegram message
@@ -446,6 +485,7 @@ export async function POST(req: Request) {
         messageId: upload.messageId,
       });
     }
+    await releaseUploadReservation(reservationId).catch(() => {});
     const msg = e instanceof Error ? e.message : String(e);
     logger.error("DB write failed after Telegram upload", { err: msg });
     return NextResponse.json({ error: "DB_WRITE_FAILED", detail: msg }, { status: 500 });
