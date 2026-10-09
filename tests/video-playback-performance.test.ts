@@ -34,10 +34,16 @@ test("shared and canonical playback sources use bounded range APIs and metadata-
   const sharedRoute = await fs.readFile(new URL("../src/app/api/shared/folders/[token]/files/[id]/route.ts", import.meta.url), "utf8");
   const canonicalRoute = await fs.readFile(new URL("../src/app/images/[file]/route.ts", import.meta.url), "utf8");
   const sharedMedia = await fs.readFile(new URL("../src/lib/shared-media.ts", import.meta.url), "utf8");
+  const serveMedia = await fs.readFile(new URL("../src/lib/serve-media.ts", import.meta.url), "utf8");
   assert.match(sharedRoute, /fetchRange: \(start, end\) => getSharedFileRange\(file, start, end\)/);
-  assert.match(sharedRoute, /export async function HEAD/);
+  assert.match(sharedRoute, /createBoundedPartialResponse/);
+  assert.doesNotMatch(sharedRoute, /createStreamingPartialResponse|TELEGRAM_RANGE_CHUNK_BYTES/);
+  assert.match(sharedRoute, /start \+ MAX_VIDEO_RANGE_BYTES - 1/);
   assert.match(canonicalRoute, /export async function HEAD/);
   assert.match(sharedMedia, /telegramService\.downloadFileRange/);
+  assert.match(serveMedia, /createBoundedPartialResponse/);
+  assert.match(serveMedia, /start \+ MAX_VIDEO_RANGE_BYTES - 1/);
+  assert.doesNotMatch(serveMedia, /createStreamingPartialResponse|TELEGRAM_RANGE_CHUNK_BYTES/);
   assert.doesNotMatch(sharedRoute, /getSharedFileBytes\(file\)[\s\S]{0,150}if \(isVideo\)/);
 });
 
@@ -76,48 +82,52 @@ test("mock benchmark reports expected 512 KiB chunk counts and bounded buffer es
 });
 
 
-test("streaming video Range sends aligned 512 KiB segments progressively", async () => {
-  const { createStreamingPartialResponse } = await import("../src/lib/bounded-range-response.ts");
-  const chunk = 512 * 1024;
+test("video Range uses one bounded Telegram fetch per HTTP response", { timeout: 5000 }, async () => {
+  const { createBoundedPartialResponse } = await import("../src/lib/bounded-range-response.ts");
+  const maxRangeBytes = 4 * 1024 * 1024;
   const calls: Array<[number, number]> = [];
-  const response = createStreamingPartialResponse({
-    range: { start: 128 * 1024, end: 128 * 1024 + 2 * chunk - 1 },
-    fileSize: 8 * 1024 * 1024,
-    maxBytes: 4 * 1024 * 1024,
-    chunkBytes: chunk,
+  const pending = createBoundedPartialResponse({
+    range: { start: 512 * 1024, end: 16 * 1024 * 1024 - 1 },
+    fileSize: 32 * 1024 * 1024,
+    maxBytes: maxRangeBytes,
     headers: { "Content-Type": "video/mp4" },
     fetchRange: async (start, end) => {
       calls.push([start, end]);
-      return { bytes: new Uint8Array(end - start + 1).fill(calls.length) };
+      return { bytes: new Uint8Array(end - start + 1).fill(23) };
     },
   });
-  assert.equal(response.status, 206);
-  assert.equal(response.headers.get("Content-Range"), `bytes 131072-1179647/8388608`);
-  assert.equal(response.headers.get("Content-Length"), String(1024 * 1024));
-  const reader = response.body!.getReader();
-  const first = await reader.read();
-  assert.equal(first.value?.length, 384 * 1024);
-  assert.deepEqual(calls, [[128 * 1024, chunk - 1]]);
-  const second = await reader.read();
-  assert.equal(second.value?.length, chunk);
-  assert.deepEqual(calls, [[128 * 1024, chunk - 1], [chunk, 2 * chunk - 1]]);
-  const last = await reader.read();
-  assert.equal(last.value?.length, 128 * 1024);
-  assert.deepEqual(calls, [[128 * 1024, chunk - 1], [chunk, 2 * chunk - 1], [2 * chunk, 2 * chunk + 128 * 1024 - 1]]);
-  const done = await reader.read();
-  assert.equal(done.done, true);
+  const response = await pending;
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls, [[512 * 1024, 512 * 1024 + maxRangeBytes - 1]]);
+  assert.equal(response?.status, 206);
+  assert.equal(response?.headers.get("Content-Range"), `bytes 524288-${524288 + maxRangeBytes - 1}/33554432`);
+  assert.equal(response?.headers.get("Content-Length"), String(maxRangeBytes));
+  assert.equal(response?.headers.get("Accept-Ranges"), "bytes");
+  const body = await response!.arrayBuffer();
+  assert.equal(body.byteLength, maxRangeBytes);
+  assert.ok(new Uint8Array(body).every((byte) => byte === 23));
 });
 
-test("streaming video Range rejects incomplete Telegram segments", async () => {
-  const { createStreamingPartialResponse } = await import("../src/lib/bounded-range-response.ts");
-  const response = createStreamingPartialResponse({
-    range: { start: 0, end: 1023 },
-    fileSize: 4096,
-    maxBytes: 4096,
-    chunkBytes: 512,
-    fetchRange: async () => ({ bytes: new Uint8Array(100) }),
+test("video Range near EOF returns a short final interval exactly", { timeout: 5000 }, async () => {
+  const { createBoundedPartialResponse } = await import("../src/lib/bounded-range-response.ts");
+  const fileSize = 1024 * 1024 + 123;
+  const calls: Array<[number, number]> = [];
+  const response = await createBoundedPartialResponse({
+    range: { start: 1024 * 1024, end: fileSize - 1 },
+    fileSize,
+    maxBytes: 4 * 1024 * 1024,
+    fetchRange: async (start, end) => {
+      calls.push([start, end]);
+      return { bytes: new Uint8Array(end - start + 1).fill(91) };
+    },
   });
-  await assert.rejects(() => response.arrayBuffer(), /RANGE_INCOMPLETE/);
+  assert.deepEqual(calls, [[1024 * 1024, fileSize - 1]]);
+  assert.equal(response?.status, 206);
+  assert.equal(response?.headers.get("Content-Range"), `bytes 1048576-${fileSize - 1}/${fileSize}`);
+  assert.equal(response?.headers.get("Content-Length"), "123");
+  const body = await response!.arrayBuffer();
+  assert.equal(body.byteLength, 123);
+  assert.ok(new Uint8Array(body).every((byte) => byte === 91));
 });
 
 test("mocked shared-video Range returns exactly the requested 1 MiB without full-file fetch", async () => {
