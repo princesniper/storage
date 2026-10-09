@@ -866,31 +866,55 @@ class TelegramServiceImpl {
         if (!activeAccessHash) throw new Error("TELEGRAM_ACCESS_HASH_MISSING");
 
         const location = this.buildDocumentLocation(activeFileId, activeAccessHash, activeReference);
-        const alignedStart = Math.floor(start / 4096) * 4096;
+        // Align each Telegram request to its 512 KiB boundary. This lets us
+        // fetch independent chunks concurrently without GenericDownloadIter
+        // re-fetching overlapping chunks to satisfy an unaligned offset.
+        const alignedStart = Math.floor(start / requestSize) * requestSize;
         const leadingBytes = start - alignedStart;
         const bytesToFetch = leadingBytes + rangeLength;
-        const chunkLimit = Math.ceil(bytesToFetch / requestSize);
-        const offset = bigInt(alignedStart);
-        const chunks: Buffer[] = [];
-        let remaining = bytesToFetch;
+        const chunkCount = Math.ceil(bytesToFetch / requestSize);
+        const chunks = new Array<Buffer>(chunkCount);
+        let nextChunkIndex = 0;
+        let chunkError: unknown = null;
+        const workerCount = Math.min(4, chunkCount);
 
-        for await (const chunk of this.client.iterDownload({
-          file: location,
-          offset,
-          limit: chunkLimit,
-          requestSize,
-        })) {
-          rangeChunkCount += 1;
-          if (remaining <= 0) break;
-          const bytes = Buffer.from(chunk);
-          const take = Math.min(bytes.length, remaining);
-          if (take > 0) {
-            chunks.push(bytes.subarray(0, take));
-            remaining -= take;
+        // Telegram's iterDownload yields sequentially. Fetch a small bounded
+        // group of independent aligned chunks concurrently so high-bitrate
+        // video ranges can arrive faster than the browser consumes its buffer.
+        await Promise.all(Array.from({ length: workerCount }, async () => {
+          while (chunkError === null) {
+            const chunkIndex = nextChunkIndex++;
+            if (chunkIndex >= chunkCount) return;
+
+            const chunkOffset = alignedStart + chunkIndex * requestSize;
+            const expectedLength = Math.min(requestSize, bytesToFetch - chunkIndex * requestSize);
+            try {
+              const iterator = this.client!.iterDownload({
+                file: location,
+                offset: bigInt(chunkOffset),
+                limit: 1,
+                chunkSize: requestSize,
+                requestSize,
+              });
+              let fetched: Buffer | null = null;
+              for await (const chunk of iterator) {
+                fetched = Buffer.from(chunk);
+                break;
+              }
+              rangeChunkCount += 1;
+              if (!fetched || fetched.length < expectedLength) {
+                throw new Error(`RANGE_INCOMPLETE_CHUNK:${chunkIndex}:${fetched?.length ?? 0}/${expectedLength}`);
+              }
+              chunks[chunkIndex] = fetched.subarray(0, expectedLength);
+            } catch (error) {
+              chunkError ??= error;
+              return;
+            }
           }
-        }
+        }));
 
-        const fetchedBytes = Buffer.concat(chunks);
+        if (chunkError !== null) throw chunkError;
+        const fetchedBytes = Buffer.concat(chunks, bytesToFetch);
         const bytes = fetchedBytes.subarray(leadingBytes, leadingBytes + rangeLength);
         if (bytes.length !== rangeLength) throw new Error(`RANGE_INCOMPLETE:${bytes.length}/${rangeLength}`);
 
