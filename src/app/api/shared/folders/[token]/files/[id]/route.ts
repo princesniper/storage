@@ -1,8 +1,8 @@
 import { getSharedFolderAccess } from "@/lib/folder-share";
 import { findSharedFile, getSharedFileBytes, getSharedFileRange } from "@/lib/shared-media";
-import { MAX_VIDEO_RANGE_BYTES } from "@/lib/serve-media";
+import { MAX_VIDEO_RANGE_BYTES, TELEGRAM_RANGE_CHUNK_BYTES } from "@/lib/serve-media";
 import { parseByteRange } from "@/lib/http-range";
-import { createBoundedPartialResponse } from "@/lib/bounded-range-response";
+import { createStreamingPartialResponse } from "@/lib/bounded-range-response";
 import { NextResponse } from "next/server";
 
 interface RouteContext { params: Promise<{ token: string; id: string }> }
@@ -51,15 +51,14 @@ export async function GET(req: Request, ctx: RouteContext) {
     if (isVideo && rangeHeader) {
       const range = parseByteRange(rangeHeader, file.size);
       if (!range) return rangeNotSatisfiable(file.size);
-      const response = await createBoundedPartialResponse({
+      return createStreamingPartialResponse({
         range,
         fileSize: file.size,
         maxBytes: MAX_VIDEO_RANGE_BYTES,
+        chunkBytes: TELEGRAM_RANGE_CHUNK_BYTES,
         fetchRange: (start, end) => getSharedFileRange(file, start, end),
         headers: baseHeaders,
       });
-      if (!response) return NextResponse.json({ error: "STORAGE_UNAVAILABLE" }, { status: 502 });
-      return response;
     }
 
     // A browser can issue GET without Range. Stream bounded Telegram ranges so
@@ -70,7 +69,7 @@ export async function GET(req: Request, ctx: RouteContext) {
         async pull(controller) {
           if (offset >= file.size) { controller.close(); return; }
           const start = offset;
-          const end = Math.min(file.size - 1, start + MAX_VIDEO_RANGE_BYTES - 1);
+          const end = Math.min(file.size - 1, start + TELEGRAM_RANGE_CHUNK_BYTES - 1);
           try {
             const result = await getSharedFileRange(file, start, end);
             if (!result || result.bytes.length !== end - start + 1) throw new Error("RANGE_INCOMPLETE");

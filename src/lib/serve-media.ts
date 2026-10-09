@@ -22,11 +22,13 @@ import { telegramService } from "@/services/telegram";
 import { logger } from "@/lib/logger";
 import { createHash, randomBytes } from "crypto";
 import { parseByteRange } from "@/lib/http-range";
+import { createStreamingPartialResponse } from "@/lib/bounded-range-response";
 
 export const NEGATIVE_TTL = 60; // seconds — short cache for missing files
 export const PUBLIC_TTL = 86400; // 24h public cache
 // Bound each Telegram-backed video range request for responsive playback.
 export const MAX_VIDEO_RANGE_BYTES = 4 * 1024 * 1024;
+export const TELEGRAM_RANGE_CHUNK_BYTES = 512 * 1024;
 export const MAX_RAW_RANGE_BYTES = 2 * 1024 * 1024;
 
 export interface ServableFile {
@@ -106,7 +108,7 @@ export async function respondWithFileBytes(file: ServableFile, req: Request, cor
       async pull(controller) {
         if (offset >= size) { controller.close(); return; }
         const start = offset;
-        const end = Math.min(size - 1, start + MAX_VIDEO_RANGE_BYTES - 1);
+        const end = Math.min(size - 1, start + TELEGRAM_RANGE_CHUNK_BYTES - 1);
         try {
           const result = await telegramService.downloadFileRange(file.storageChannel.telegramChannelId, file.telegramMessageId, file.telegramFileId, file.telegramFileReference, start, end, file.telegramAccessHash ?? undefined);
           if (result.bytes.length !== end - start + 1) throw new Error("RANGE_INCOMPLETE");
@@ -142,7 +144,59 @@ export async function respondWithFileBytes(file: ServableFile, req: Request, cor
           },
         });
       }
-      const rangeLimit = isRaw ? MAX_RAW_RANGE_BYTES : MAX_VIDEO_RANGE_BYTES;
+      if (isVideo) {
+        const requestId = correlationId ?? randomBytes(8).toString("hex");
+        const rangeStartedAt = Date.now();
+        return createStreamingPartialResponse({
+          range: parsed,
+          fileSize: Number(file.size),
+          maxBytes: MAX_VIDEO_RANGE_BYTES,
+          chunkBytes: TELEGRAM_RANGE_CHUNK_BYTES,
+          headers: {
+            "Content-Type": file.mimeType,
+            "Cache-Control": `public, max-age=${PUBLIC_TTL}, immutable`,
+            "X-Content-Type-Options": "nosniff",
+            "Access-Control-Allow-Origin": "*",
+            ...(file.sha256 ? { "ETag": `"${file.sha256}"` } : {}),
+          },
+          fetchRange: async (start, end) => {
+            const segmentStartedAt = Date.now();
+            const result = await telegramService.downloadFileRange(
+              file.storageChannel.telegramChannelId,
+              file.telegramMessageId,
+              file.telegramFileId,
+              file.telegramFileReference,
+              start,
+              end,
+              file.telegramAccessHash ?? undefined,
+              requestId,
+            );
+            if (result.refreshedReferenceB64 && result.refreshedReferenceB64 !== file.telegramFileReference) {
+              file.telegramFileReference = result.refreshedReferenceB64;
+              await db.file.update({
+                where: { id: file.id },
+                data: { telegramFileReference: result.refreshedReferenceB64 },
+              }).catch((error) => logger.warn("failed to persist refreshed fileReference (non-fatal)", {
+                requestId,
+                sequenceNumber: file.sequenceNumber,
+                err: error instanceof Error ? error.message : String(error),
+              }));
+            }
+            logger.info("canonical media range segment served", {
+              requestId,
+              sequenceNumber: file.sequenceNumber,
+              rangeStart: start,
+              rangeEnd: end,
+              responseBytes: result.bytes.length,
+              telegramRangeMs: Date.now() - segmentStartedAt,
+              elapsedMs: Date.now() - rangeStartedAt,
+            });
+            return { bytes: result.bytes };
+          },
+        });
+      }
+
+      const rangeLimit = MAX_RAW_RANGE_BYTES;
       const requestedEnd = Math.min(parsed.end, parsed.start + rangeLimit - 1);
       const requestId = correlationId ?? randomBytes(8).toString("hex");
       const rangeStartedAt = Date.now();

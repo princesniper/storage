@@ -76,6 +76,50 @@ test("mock benchmark reports expected 512 KiB chunk counts and bounded buffer es
 });
 
 
+test("streaming video Range sends aligned 512 KiB segments progressively", async () => {
+  const { createStreamingPartialResponse } = await import("../src/lib/bounded-range-response.ts");
+  const chunk = 512 * 1024;
+  const calls: Array<[number, number]> = [];
+  const response = createStreamingPartialResponse({
+    range: { start: 128 * 1024, end: 128 * 1024 + 2 * chunk - 1 },
+    fileSize: 8 * 1024 * 1024,
+    maxBytes: 4 * 1024 * 1024,
+    chunkBytes: chunk,
+    headers: { "Content-Type": "video/mp4" },
+    fetchRange: async (start, end) => {
+      calls.push([start, end]);
+      return { bytes: new Uint8Array(end - start + 1).fill(calls.length) };
+    },
+  });
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("Content-Range"), `bytes 131072-1179647/8388608`);
+  assert.equal(response.headers.get("Content-Length"), String(1024 * 1024));
+  const reader = response.body!.getReader();
+  const first = await reader.read();
+  assert.equal(first.value?.length, 384 * 1024);
+  assert.deepEqual(calls, [[128 * 1024, chunk - 1]]);
+  const second = await reader.read();
+  assert.equal(second.value?.length, chunk);
+  assert.deepEqual(calls, [[128 * 1024, chunk - 1], [chunk, 2 * chunk - 1]]);
+  const last = await reader.read();
+  assert.equal(last.value?.length, 128 * 1024);
+  assert.deepEqual(calls, [[128 * 1024, chunk - 1], [chunk, 2 * chunk - 1], [2 * chunk, 2 * chunk + 128 * 1024 - 1]]);
+  const done = await reader.read();
+  assert.equal(done.done, true);
+});
+
+test("streaming video Range rejects incomplete Telegram segments", async () => {
+  const { createStreamingPartialResponse } = await import("../src/lib/bounded-range-response.ts");
+  const response = createStreamingPartialResponse({
+    range: { start: 0, end: 1023 },
+    fileSize: 4096,
+    maxBytes: 4096,
+    chunkBytes: 512,
+    fetchRange: async () => ({ bytes: new Uint8Array(100) }),
+  });
+  await assert.rejects(() => response.arrayBuffer(), /RANGE_INCOMPLETE/);
+});
+
 test("mocked shared-video Range returns exactly the requested 1 MiB without full-file fetch", async () => {
   const { createBoundedPartialResponse } = await import("../src/lib/bounded-range-response.ts");
   const fileSize = 5 * 1024 * 1024;
