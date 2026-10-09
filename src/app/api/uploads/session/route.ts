@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isRawMime, isVideoMime, normalizeMimeType } from "@/lib/env";
 import { rawMimeFromName } from "@/lib/raw";
 import { createUploadManifest, RAW_RESUMABLE_CHUNK_SIZE, RESUMABLE_CHUNK_SIZE } from "@/lib/resumable-upload";
+import { MAX_RAW_RESUMABLE_CHUNKS, MAX_RESUMABLE_CHUNKS } from "@/lib/upload-limits";
 
 const schema = z.object({
   fileName: z.string().min(1).max(255),
@@ -60,7 +61,7 @@ export async function POST(req: Request) {
 
   const chunkSize = isRawMime(mimeType) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
   const totalChunks = Math.ceil(input.size / chunkSize);
-  const maxChunks = isRawMime(mimeType) ? 16384 : 1024;
+  const maxChunks = isRawMime(mimeType) ? MAX_RAW_RESUMABLE_CHUNKS : MAX_RESUMABLE_CHUNKS;
   if (totalChunks < 1 || totalChunks > maxChunks) {
     return NextResponse.json({ error: "TOO_MANY_CHUNKS" }, { status: 413 });
   }

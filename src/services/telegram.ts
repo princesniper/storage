@@ -481,12 +481,18 @@ class TelegramServiceImpl {
     // Let Telegram classify supported video uploads as videos so it can create
     // a native document thumbnail and mark MP4/MOV media as streamable.
     // Existing non-video files remain documents exactly as before.
-    const configuredWorkers = Number.parseInt(process.env.TELEGRAM_UPLOAD_WORKERS ?? "8", 10);
+    // Keep parallel MTProto part uploads conservative for large videos. Eight
+    // concurrent parts can amplify transient socket/RPC failures on 300–800 MiB
+    // transfers; allow explicit tuning but cap large files at four workers.
+    const largeVideo = isVideo && fileSize >= 300 * 1024 * 1024;
+    const defaultWorkers = largeVideo ? 2 : 4;
+    const configuredWorkers = Number.parseInt(process.env.TELEGRAM_UPLOAD_WORKERS ?? String(defaultWorkers), 10);
     const workers = Number.isFinite(configuredWorkers)
-      ? Math.max(1, Math.min(8, configuredWorkers))
-      : 4;
+      ? Math.max(1, Math.min(largeVideo ? 4 : 8, configuredWorkers))
+      : defaultWorkers;
     const uploadStartedAt = Date.now();
-    logger.info("Telegram upload started", {
+    let lastLoggedProgress = -10;
+    logger.info(isVideo ? "video_upload_started" : "telegram_upload_started", {
       uploadId,
       sizeBytes: fileSize,
       workers,
@@ -498,7 +504,19 @@ class TelegramServiceImpl {
           file: telegramFile,
           progressCallback: (progress) => {
             onProgress?.(progress);
-            if (uploadId) setTelegramUploadProgress(uploadId, Math.round(progress * 100), "telegram");
+            const progressPercent = Math.max(0, Math.min(100, Math.round(progress * 100)));
+            if (uploadId) setTelegramUploadProgress(uploadId, progressPercent, "telegram");
+            if (progressPercent >= 100 || progressPercent - lastLoggedProgress >= 10) {
+              lastLoggedProgress = progressPercent;
+              logger.info(isVideo ? "video_upload_progress" : "telegram_upload_progress", {
+                uploadId,
+                sizeBytes: fileSize,
+                bytesTransferred: Math.round(fileSize * progressPercent / 100),
+                progressPercent,
+                elapsedMs: Date.now() - uploadStartedAt,
+                workers,
+              });
+            }
           },
           caption: originalName,
           forceDocument: !isVideo,
@@ -506,7 +524,7 @@ class TelegramServiceImpl {
           fileSize,
           workers,
         });
-        logger.info("Telegram upload completed", {
+        logger.info(isVideo ? "video_upload_completed" : "telegram_upload_completed", {
           uploadId,
           sizeBytes: fileSize,
           durationMs: Date.now() - uploadStartedAt,
@@ -514,6 +532,13 @@ class TelegramServiceImpl {
         });
         return this.extractMessageRef(sent);
       } catch (err) {
+        logger.warn(isVideo ? "video_upload_attempt_failed" : "telegram_upload_attempt_failed", {
+          uploadId,
+          sizeBytes: fileSize,
+          attempt: attempt + 1,
+          elapsedMs: Date.now() - uploadStartedAt,
+          reason: err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300),
+        });
         const waitSeconds = this.getFloodWaitSeconds(err);
         if (waitSeconds != null && attempt < 2) {
           await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));

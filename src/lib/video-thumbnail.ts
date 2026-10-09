@@ -1,4 +1,5 @@
 import { promises as fs } from "fs";
+import sharp from "sharp";
 import { spawn } from "child_process";
 import * as os from "os";
 import * as path from "path";
@@ -56,6 +57,64 @@ async function probeDuration(sourcePath: string): Promise<number> {
   const duration = Number.parseFloat(raw);
   if (!Number.isFinite(duration) || duration < 0) throw new Error("VIDEO_DURATION_UNAVAILABLE");
   return duration;
+}
+
+async function validateThumbnail(thumbnailPath: string): Promise<void> {
+  const metadata = await sharp(thumbnailPath).metadata();
+  if (!metadata.width || !metadata.height || !["jpeg", "png", "webp"].includes(metadata.format ?? "")) {
+    throw new Error("INVALID_VIDEO_THUMBNAIL");
+  }
+}
+
+/**
+ * Generate a preview from the assembled local upload before sending the
+ * original to Telegram. This avoids downloading a 300–800 MiB video back
+ * from Telegram just because its document thumbnail is absent or unusable.
+ */
+export async function generateVideoThumbnailFromPath(sourcePath: string, outputPath: string): Promise<number> {
+  const workDir = path.dirname(outputPath);
+  let duration = 0;
+  try {
+    duration = await probeDuration(sourcePath);
+  } catch {
+    // Try a small set of early timestamps even if the container duration
+    // cannot be probed; the upload itself should not be blocked by previews.
+  }
+
+  const candidates = [...new Set([
+    0,
+    0.5,
+    duration > 1 ? Math.min(5, duration * 0.1) : 1.5,
+    duration > 2 ? duration * 0.5 : 2,
+  ].map((value) => Math.max(0, value).toFixed(3)))];
+
+  let lastError: unknown = null;
+  for (const timestamp of candidates) {
+    await fs.rm(outputPath, { force: true }).catch(() => {});
+    try {
+      await runCommand(
+        "ffmpeg",
+        [
+          "-hide_banner", "-loglevel", "error",
+          "-ss", timestamp,
+          "-i", sourcePath,
+          "-frames:v", "1",
+          "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
+          "-q:v", String(THUMB_QUALITY),
+          "-y", outputPath,
+        ],
+        workDir,
+        30_000,
+      );
+      await validateThumbnail(outputPath);
+      const stat = await fs.stat(outputPath);
+      if (stat.size <= 0) throw new Error("EMPTY_VIDEO_THUMBNAIL");
+      return stat.size;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("VIDEO_THUMBNAIL_EXTRACTION_FAILED");
 }
 
 async function claimNextJob() {
@@ -121,34 +180,49 @@ async function processOne(fileId: number): Promise<boolean> {
     const telegramStartedAt = Date.now();
     let sourceBytes = 0;
     let sourceMode = "telegram-thumbnail";
+    let thumbnailReady = false;
 
     // Fast path: Telegram may already have generated a document thumbnail.
-    // This avoids touching the original video bytes entirely.
+    // If the thumbnail is malformed or FFmpeg cannot decode it, continue to
+    // the bounded-prefix/original fallback instead of failing the whole job.
     const telegramThumb = await telegramService.downloadVideoThumbnail(
       file.storageChannel.telegramChannelId,
       file.telegramMessageId,
     );
     if (telegramThumb) {
-      await fs.writeFile(sourcePath, telegramThumb);
-      sourceBytes = telegramThumb.length;
-      sourceMode = "telegram-thumbnail";
-      await runCommand(
-        "ffmpeg",
-        [
-          "-hide_banner", "-loglevel", "error",
-          "-i", sourcePath,
-          "-frames:v", "1",
-          "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
-          "-q:v", String(THUMB_QUALITY),
-          "-y", outputPath,
-        ],
-        workDir,
-        60_000,
-      );
-    } else {
-      // Second path: fetch only a small bounded prefix and let FFmpeg attempt
-      // to decode an early frame. This avoids the old unconditional full-file
-      // download for formats whose metadata is available near the head.
+      try {
+        await fs.writeFile(sourcePath, telegramThumb);
+        sourceBytes = telegramThumb.length;
+        await runCommand(
+          "ffmpeg",
+          [
+            "-hide_banner", "-loglevel", "error",
+            "-i", sourcePath,
+            "-frames:v", "1",
+            "-vf", `scale=${THUMB_MAX_DIMENSION}:-2:force_original_aspect_ratio=decrease`,
+            "-q:v", String(THUMB_QUALITY),
+            "-y", outputPath,
+          ],
+          workDir,
+          60_000,
+        );
+        await validateThumbnail(outputPath);
+        thumbnailReady = true;
+      } catch (error) {
+        logger.warn("[VIDEO_THUMBNAIL] Telegram thumbnail unusable; falling back", {
+          fileId: file.id,
+          reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+        });
+        await fs.rm(sourcePath, { force: true }).catch(() => {});
+        await fs.rm(outputPath, { force: true }).catch(() => {});
+        sourceMode = "partial-prefix";
+      }
+    }
+
+    if (!thumbnailReady) {
+      // Fetch only a small bounded prefix first. Some MP4/MOV containers place
+      // moov at the end; that case explicitly falls back to a disk-backed full
+      // download, never a full-video Node Buffer.
       sourceMode = "partial-prefix";
       const partial = await telegramService.downloadFilePrefixToPath(
         file.storageChannel.telegramChannelId,
@@ -179,10 +253,10 @@ async function processOne(fileId: number): Promise<boolean> {
           workDir,
           60_000,
         );
+        await validateThumbnail(outputPath);
       } catch {
-        // Some MP4/MOV files place moov at the end. Keep this a controlled
-        // fallback, not the default path; never hold the full video in RAM.
         sourceMode = "full-source-fallback";
+        await fs.rm(outputPath, { force: true }).catch(() => {});
         const downloaded = await telegramService.downloadFileToPath(
           file.storageChannel.telegramChannelId,
           file.telegramMessageId,
@@ -209,6 +283,7 @@ async function processOne(fileId: number): Promise<boolean> {
           workDir,
           JOB_TIMEOUT_MS,
         );
+        await validateThumbnail(outputPath);
       }
     }
 

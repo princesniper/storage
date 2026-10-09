@@ -7,10 +7,12 @@ import { db } from "@/lib/db";
 import { audit } from "@/services/audit";
 import { telegramService, setTelegramUploadProgress, setTelegramUploadResult, setTelegramUploadFailure } from "@/services/telegram";
 import { generatePublicId } from "@/lib/public-id";
-import { canonicalUrl } from "@/lib/media-url";
+import { canonicalPreviewUrl, canonicalUrl } from "@/lib/media-url";
 import { isAllowedDetectedMime, isRawMime, isVideoMime, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, normalizeMimeType } from "@/lib/env";
 import { rawMimeFromName } from "@/lib/raw";
-import { triggerVideoThumbnailWorker } from "@/lib/video-thumbnail";
+import { generateVideoThumbnailFromPath, triggerVideoThumbnailWorker } from "@/lib/video-thumbnail";
+import { logger } from "@/lib/logger";
+import * as path from "path";
 import {
   assembleUpload,
   cleanupUpload,
@@ -50,6 +52,17 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
     throw new Error(`FILE_TOO_LARGE:${Math.round(typeLimit / 1024 / 1024)}`);
   }
 
+  // Resolve database prerequisites before creating any Telegram messages so
+  // a lookup/ID-generation failure cannot leave orphaned media in storage.
+  const admin = await db.admin.findFirst({ where: { email: adminEmail } });
+  let publicId = generatePublicId();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const existing = await db.file.findUnique({ where: { publicId }, select: { id: true } });
+    if (!existing) break;
+    publicId = generatePublicId();
+    if (attempt === 4) throw new Error("ID_GENERATION_FAILED");
+  }
+
   let width: number | null = null;
   let height: number | null = null;
   if (!isVideoMime(detectedMime)) {
@@ -61,6 +74,47 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
   }
 
   setTelegramUploadProgress(uploadId, 0, "telegram");
+
+  // The assembled upload is already on local disk. Generate video previews
+  // from that source before the original is sent to Telegram, avoiding a
+  // second 300–800 MiB download just to extract one frame.
+  const previewPath = path.join(path.dirname(assembled), "video-thumbnail.jpg");
+  let previewSize: number | null = null;
+  let previewUpload: Awaited<ReturnType<typeof telegramService.uploadFileFromPath>> | null = null;
+  if (isVideoMime(detectedMime)) {
+    const previewStartedAt = Date.now();
+    logger.info("video_thumbnail_extraction_started", {
+      uploadId,
+      sizeBytes: manifest.size,
+      stage: "local-upload-source",
+    });
+    try {
+      previewSize = await generateVideoThumbnailFromPath(assembled, previewPath);
+      logger.info("video_thumbnail_extraction_completed", {
+        uploadId,
+        sizeBytes: manifest.size,
+        previewSize,
+        elapsedMs: Date.now() - previewStartedAt,
+      });
+    } catch (error) {
+      logger.warn("video_thumbnail_extraction_failed", {
+        uploadId,
+        sizeBytes: manifest.size,
+        elapsedMs: Date.now() - previewStartedAt,
+        reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+      });
+      // The original upload must remain independent of thumbnail extraction.
+      previewSize = null;
+    }
+  }
+
+  if (isVideoMime(detectedMime)) {
+    logger.info("video_upload_started", {
+      uploadId,
+      sizeBytes: manifest.size,
+      mimeType: detectedMime,
+    });
+  }
   const upload = await telegramService.uploadFileFromPath(
     channel.telegramChannelId,
     assembled,
@@ -70,13 +124,36 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
     uploadId
   );
 
-  const admin = await db.admin.findFirst({ where: { email: adminEmail } });
-  let publicId = generatePublicId();
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const existing = await db.file.findUnique({ where: { publicId }, select: { id: true } });
-    if (!existing) break;
-    publicId = generatePublicId();
-    if (attempt === 4) throw new Error("ID_GENERATION_FAILED");
+  if (isVideoMime(detectedMime) && previewSize != null) {
+    try {
+      previewUpload = await telegramService.uploadFileFromPath(
+        channel.telegramChannelId,
+        previewPath,
+        previewSize,
+        `${path.parse(manifest.fileName).name || "video"}-thumbnail.jpg`,
+      );
+      logger.info("video_thumbnail_upload_completed", {
+        uploadId,
+        sizeBytes: previewSize,
+      });
+    } catch (error) {
+      logger.warn("video_thumbnail_upload_failed", {
+        uploadId,
+        sizeBytes: previewSize,
+        reason: error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300),
+      });
+      // The regular background worker will retry from Telegram if preview
+      // upload failed; the original video remains usable.
+      previewUpload = null;
+    }
+  }
+
+  if (isVideoMime(detectedMime)) {
+    logger.info("video_upload_completed", {
+      uploadId,
+      sizeBytes: manifest.size,
+      mimeType: detectedMime,
+    });
   }
 
   const extension = manifest.fileName.includes(".")
@@ -104,14 +181,30 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
           telegramFileReference: upload.fileReference,
           publicUrl: canonicalUrl(seq.id, detectedMime),
           status: "active",
-          // RAW and video previews are derived asynchronously. The original upload succeeds independently.
-          previewStatus: isRawMime(detectedMime) || isVideoMime(detectedMime) ? "pending" : "none",
+          // Video previews extracted from the local upload are persisted with
+          // the original. RAW and failed video previews remain asynchronous.
+          previewStatus: previewUpload
+            ? "ready"
+            : isRawMime(detectedMime) || isVideoMime(detectedMime)
+              ? "pending"
+              : "none",
+          previewUrl: previewUpload ? canonicalPreviewUrl(seq.id) : null,
+          previewMimeType: previewUpload ? "image/jpeg" : null,
+          previewSize: previewUpload && previewSize != null ? previewSize : null,
+          previewTelegramMessageId: previewUpload?.messageId ?? null,
+          previewTelegramFileId: previewUpload?.fileId ?? null,
+          previewTelegramAccessHash: previewUpload?.accessHash ?? null,
+          previewTelegramFileReference: previewUpload?.fileReference ?? null,
+          previewGeneratedAt: previewUpload ? new Date() : null,
         },
         include: { storageChannel: { select: { id: true, name: true } }, folder: { select: { id: true, name: true } } },
       });
     });
   } catch (error) {
     try { await telegramService.deleteMessage(channel.telegramChannelId, upload.messageId); } catch {}
+    if (previewUpload) {
+      try { await telegramService.deleteMessage(channel.telegramChannelId, previewUpload.messageId); } catch {}
+    }
     throw error;
   }
 
@@ -134,7 +227,7 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
   });
 
   setTelegramUploadResult(uploadId, fileRow.publicUrl);
-  if (isVideoMime(detectedMime)) triggerVideoThumbnailWorker();
+  if (isVideoMime(detectedMime) && !previewUpload) triggerVideoThumbnailWorker();
   return fileRow.publicUrl;
 }
 

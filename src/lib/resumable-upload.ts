@@ -5,14 +5,9 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import { pipeline } from "stream/promises";
 import { isRawFileName } from "@/lib/raw";
+import { RESUMABLE_CHUNK_SIZE, RAW_RESUMABLE_CHUNK_SIZE } from "@/lib/upload-limits";
 
-// Keep each browser -> Railway request small enough for slow/mobile links.
-// One MiB still keeps an 800 MB upload within the 1024-chunk session limit.
-export const RESUMABLE_CHUNK_SIZE = 256 * 1024;
-// RAW/DNG uses the same 256 KiB browser chunk size as the generic resumable
-// uploader. Keeping one chunk size across client + session + chunk endpoint
-// prevents stale/client-version mismatches while still keeping requests small.
-export const RAW_RESUMABLE_CHUNK_SIZE = RESUMABLE_CHUNK_SIZE;
+export { RESUMABLE_CHUNK_SIZE, RAW_RESUMABLE_CHUNK_SIZE } from "@/lib/upload-limits";
 
 export type UploadManifest = {
   uploadId: string;
@@ -57,6 +52,10 @@ export async function createUploadManifest(input: Omit<UploadManifest, "uploadId
   await fs.mkdir(path.join(dir, "chunks"), { recursive: true });
   const manifest: UploadManifest = { ...input, uploadId, createdAt: Date.now() };
   await fs.writeFile(manifestPath(uploadId), JSON.stringify(manifest), "utf8");
+  // Store received chunks directly at their final offsets in one assembled
+  // file. This avoids temporarily requiring roughly 2x the original size
+  // (all chunk files plus a second assembled copy) for 800 MiB uploads.
+  await fs.writeFile(assembledPath(uploadId), Buffer.alloc(0));
   return manifest;
 }
 
@@ -67,17 +66,41 @@ export async function readUploadManifest(uploadId: string): Promise<UploadManife
   return manifest;
 }
 
+function usesRawChunkSize(manifest: UploadManifest) {
+  const mime = manifest.mimeType.toLowerCase();
+  return isRawFileName(manifest.fileName) || mime.startsWith("image/x-raw-") || mime === "image/x-adobe-dng" || mime === "image/x-raw";
+}
+
 export async function writeUploadChunk(uploadId: string, index: number, bytes: Uint8Array) {
   const manifest = await readUploadManifest(uploadId);
   if (index >= manifest.totalChunks) throw new Error("Chunk index out of range");
-  const chunkSize = isRawFileName(manifest.fileName) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
+  const chunkSize = usesRawChunkSize(manifest) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
   const expected = index === manifest.totalChunks - 1
     ? manifest.size - index * chunkSize
     : chunkSize;
   if (bytes.byteLength !== expected) {
     throw new Error(`Invalid chunk size: expected ${expected}, received ${bytes.byteLength}`);
   }
-  await fs.writeFile(chunkPath(uploadId, index), bytes);
+
+  const markerPath = chunkPath(uploadId, index);
+  // Remove the completion marker before overwriting bytes so an interrupted
+  // retry cannot make a partially written chunk appear complete.
+  await fs.rm(markerPath, { force: true });
+  const outputPath = assembledPath(uploadId);
+  const handle = await fs.open(outputPath, "r+");
+  try {
+    const position = index * chunkSize;
+    let written = 0;
+    while (written < bytes.byteLength) {
+      const result = await handle.write(bytes, written, bytes.byteLength - written, position + written);
+      if (result.bytesWritten <= 0) throw new Error("UPLOAD_CHUNK_WRITE_STALLED");
+      written += result.bytesWritten;
+    }
+  } finally {
+    await handle.close();
+  }
+  // Small marker files track completed chunks without duplicating their data.
+  await fs.writeFile(markerPath, String(bytes.byteLength), "utf8");
   return { index, receivedBytes: bytes.byteLength };
 }
 
@@ -93,36 +116,49 @@ export async function hasUploadChunk(uploadId: string, index: number) {
 export async function assembleUpload(uploadId: string): Promise<string> {
   const manifest = await readUploadManifest(uploadId);
   const output = assembledPath(uploadId);
-  const handle = await fs.open(output, "w");
-  try {
-    let total = 0;
-    for (let index = 0; index < manifest.totalChunks; index += 1) {
-      const source = chunkPath(uploadId, index);
-      const stat = await fs.stat(source);
-      const chunkSize = isRawFileName(manifest.fileName) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
-      const expected = index === manifest.totalChunks - 1
-        ? manifest.size - index * chunkSize
-        : chunkSize;
-      if (stat.size !== expected) throw new Error(`Chunk ${index} is incomplete`);
-      const data = await fs.readFile(source);
-      await handle.write(data);
-      total += data.length;
+  const chunkSize = usesRawChunkSize(manifest) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
+  let total = 0;
+
+  // Chunk payloads are already written at their final offsets. Validate every
+  // marker and the final file size rather than copying the entire upload again.
+  for (let index = 0; index < manifest.totalChunks; index += 1) {
+    const marker = chunkPath(uploadId, index);
+    let recordedSize = 0;
+    try {
+      recordedSize = Number(await fs.readFile(marker, "utf8"));
+    } catch {
+      throw new Error(`Chunk ${index} is incomplete`);
     }
-    if (total !== manifest.size) throw new Error("Assembled file size mismatch");
-  } finally {
-    await handle.close();
+    const expected = index === manifest.totalChunks - 1
+      ? manifest.size - index * chunkSize
+      : chunkSize;
+    if (!Number.isInteger(recordedSize) || recordedSize !== expected) {
+      throw new Error(`Chunk ${index} is incomplete`);
+    }
+    total += recordedSize;
+  }
+
+  const stat = await fs.stat(output);
+  if (total !== manifest.size || stat.size !== manifest.size) {
+    throw new Error("Assembled file size mismatch");
   }
   return output;
-}export async function countUploadChunks(uploadId: string) {
+}
+
+export async function countUploadChunks(uploadId: string) {
   const manifest = await readUploadManifest(uploadId);
+  const chunkSize = usesRawChunkSize(manifest) ? RAW_RESUMABLE_CHUNK_SIZE : RESUMABLE_CHUNK_SIZE;
   let count = 0;
   let bytes = 0;
   for (let index = 0; index < manifest.totalChunks; index += 1) {
     try {
-      const stat = await fs.stat(chunkPath(uploadId, index));
-      if (stat.isFile()) {
+      const recordedSize = Number(await fs.readFile(chunkPath(uploadId, index), "utf8"));
+      const expected = index === manifest.totalChunks - 1
+        ? manifest.size - index * chunkSize
+        : chunkSize;
+      if (recordedSize === expected) {
         count += 1;
-        bytes += stat.size;
+        bytes += recordedSize;
       }
     } catch {}
   }
