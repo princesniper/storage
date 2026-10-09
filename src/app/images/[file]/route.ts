@@ -12,6 +12,9 @@
  * - Unknown numbers → 404.
  */
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
+import { logger } from "@/lib/logger";
+import { isRawMime } from "@/lib/env";
 import { cache } from "@/lib/cache";
 import { canonicalUrl, extForMime, parseMediaFilename } from "@/lib/media-url";
 import {
@@ -25,6 +28,8 @@ import {
 interface RouteContext { params: Promise<{ file: string }> }
 
 export async function GET(req: Request, ctx: RouteContext) {
+  const requestStartedAt = Date.now();
+  const requestId = req.headers.get("x-request-id")?.slice(0, 100) || randomBytes(8).toString("hex");
   const { file } = await ctx.params;
   const parsed = parseMediaFilename(file);
 
@@ -38,7 +43,11 @@ export async function GET(req: Request, ctx: RouteContext) {
   const sequenceNumber = parsed?.sequenceNumber ?? (legacy ? Number(legacy[1]) : NaN);
   if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber <= 0) return notFound();
 
+  const metadataStartedAt = Date.now();
   const dbFile = await loadFileBySequence(sequenceNumber);
+  if (dbFile && req.headers.has("range") && (dbFile.mimeType.startsWith("video/") || dbFile.mimeType.startsWith("audio/") || isRawMime(dbFile.mimeType))) {
+    logger.info("canonical media metadata lookup", { requestId, sequenceNumber, metadataMs: Date.now() - metadataStartedAt, found: true });
+  }
   if (!dbFile) {
     await cache.setExists(cacheKeyFor(sequenceNumber), false);
     return notFound();
@@ -60,5 +69,40 @@ export async function GET(req: Request, ctx: RouteContext) {
     return NextResponse.redirect(canonicalUrl(dbFile.sequenceNumber, dbFile.mimeType), 301);
   }
 
-  return respondWithFileBytes(dbFile, req);
+  return respondWithFileBytes(dbFile, req, requestId, requestStartedAt);
+}
+
+
+/** HEAD is metadata-only: never boot Telegram or invoke the byte-download path. */
+export async function HEAD(_req: Request, ctx: RouteContext) {
+  const { file } = await ctx.params;
+  const parsed = parseMediaFilename(file);
+  const legacy = parsed ? null : /^(\d{1,12})\.([a-z0-9]{2,20})$/i.exec(file.trim());
+  const sequenceNumber = parsed?.sequenceNumber ?? (legacy ? Number(legacy[1]) : NaN);
+  if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber <= 0) return notFound();
+
+  const dbFile = await loadFileBySequence(sequenceNumber);
+  if (!dbFile) return notFound();
+  if (dbFile.status !== "active") {
+    return new Response(null, { status: 410, headers: { "Content-Type": "application/json" } });
+  }
+
+  const canonicalExt = extForMime(dbFile.mimeType);
+  const requestedExt = parsed?.ext ?? legacy![2].toLowerCase();
+  if (requestedExt !== canonicalExt) {
+    return NextResponse.redirect(canonicalUrl(dbFile.sequenceNumber, dbFile.mimeType), 301);
+  }
+
+  const rangeCapable = dbFile.mimeType.startsWith("video/") || dbFile.mimeType.startsWith("audio/") || isRawMime(dbFile.mimeType);
+  return new Response(null, {
+    status: 200,
+    headers: {
+      "Content-Type": dbFile.mimeType,
+      "Content-Length": String(dbFile.size),
+      "Cache-Control": "public, max-age=86400, immutable",
+      "X-Content-Type-Options": "nosniff",
+      ...(rangeCapable ? { "Accept-Ranges": "bytes" } : {}),
+      ...(dbFile.sha256 ? { "ETag": "\"" + dbFile.sha256 + "\"" } : {}),
+    },
+  });
 }

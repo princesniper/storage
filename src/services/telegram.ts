@@ -832,7 +832,8 @@ class TelegramServiceImpl {
     currentFileReferenceB64: string,
     start: number,
     end: number,
-    accessHash?: string
+    accessHash?: string,
+    requestId?: string
   ): Promise<{ bytes: Buffer; refreshedReferenceB64?: string }> {
     await this.start();
     if (this.status !== "connected" || !this.client) {
@@ -842,6 +843,11 @@ class TelegramServiceImpl {
       throw new Error("INVALID_RANGE");
     }
 
+    const rangeStartedAt = Date.now();
+    const rangeRequestId = requestId ?? randomBytes(8).toString("hex");
+    let rangeChunkCount = 0;
+    let rangeRetryCount = 0;
+    let referenceRefreshMs = 0;
     const requestSize = 512 * 1024;
     const rangeLength = end - start + 1;
     let lastError: unknown = null;
@@ -853,6 +859,7 @@ class TelegramServiceImpl {
     // directly. getMessages() is a slow control-plane operation and is only
     // needed when Telegram rejects an expired file reference.
     for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const attemptStartedAt = Date.now();
       try {
         if (!this.client || this.status !== "connected") await this.ensureConnectedClient(true);
         if (!this.client) throw new Error(this.notConnectedMessage());
@@ -873,6 +880,7 @@ class TelegramServiceImpl {
           limit: chunkLimit,
           requestSize,
         })) {
+          rangeChunkCount += 1;
           if (remaining <= 0) break;
           const bytes = Buffer.from(chunk);
           const take = Math.min(bytes.length, remaining);
@@ -886,18 +894,22 @@ class TelegramServiceImpl {
         const bytes = fetchedBytes.subarray(leadingBytes, leadingBytes + rangeLength);
         if (bytes.length !== rangeLength) throw new Error(`RANGE_INCOMPLETE:${bytes.length}/${rangeLength}`);
 
+        if (requestId) logger.info("Telegram range fetch complete", { requestId: rangeRequestId, telegramRangeMs: Date.now() - rangeStartedAt, telegramRpcAndRetryMs: Math.max(0, Date.now() - rangeStartedAt - referenceRefreshMs), rangeBytes: rangeLength, chunkCount: rangeChunkCount, retryCount: rangeRetryCount, referenceRefreshMs, telegramStatus: this.status });
         return {
           bytes,
           refreshedReferenceB64: activeReference !== currentFileReferenceB64 ? activeReference : undefined,
         };
       } catch (error) {
         lastError = error;
+        rangeRetryCount += 1;
         const message = error instanceof Error ? error.message : String(error);
-        logger.warn("Telegram range download retry", { messageId, start, end, attempt, reason: message.slice(0, 300) });
+        logger.warn("Telegram range download retry", { requestId: rangeRequestId, messageId, start, end, attempt, attemptMs: Date.now() - attemptStartedAt, telegramStatus: this.status, reason: message.slice(0, 300) });
         if (attempt < 3) {
-          if (/FILE_REFERENCE|FILE_REFERENCE_EXPIRED|FILEREF|RPC_CALL_FAIL|TIMEOUT|CONNECTION|AUTH_KEY/i.test(message)) {
+          if (/FILE_REFERENCE|FILE_REFERENCE_EXPIRED|FILEREF|TELEGRAM_ACCESS_HASH_MISSING|TELEGRAM_FILE_ID_MISSING|RPC_CALL_FAIL|TIMEOUT|CONNECTION|AUTH_KEY/i.test(message)) {
             try {
+              const refreshStartedAt = Date.now();
               const fresh = await this.refreshDocumentReference(peerId, messageId);
+              referenceRefreshMs += Date.now() - refreshStartedAt;
               activeFileId = fresh.fileId;
               activeAccessHash = fresh.accessHash;
               activeReference = fresh.fileReference;

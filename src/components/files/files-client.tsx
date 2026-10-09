@@ -45,6 +45,8 @@ interface FileRow {
   size: number;
   status: string;
   publicUrl: string;
+  previewStatus?: string;
+  previewUrl?: string | null;
   width: number | null;
   height: number | null;
   createdAt: string;
@@ -691,26 +693,18 @@ function DatePicker({ label, value, onChange }: { label: string; value: string; 
 }
 
 function Thumb({ file, className }: { file: FileRow; className?: string }) {
+  const thumbClass = className ?? "size-full object-cover";
   if (isVideoMime(file.mimeType)) {
+    if (file.previewStatus === "ready" && file.previewUrl) {
+      return <img src={file.previewUrl} alt="" loading="lazy" className={thumbClass} />;
+    }
     return (
-      <video
-        src={file.publicUrl}
-        muted
-        playsInline
-        preload="auto"
-        className={className ?? "size-full object-cover"}
-        aria-label=""
-      />
+      <div className={cn("size-full flex items-center justify-center bg-muted/50 text-muted-foreground", className)} aria-label="Video preview unavailable">
+        <span className="rounded-full border border-current/30 px-3 py-1 text-xs font-medium">VIDEO</span>
+      </div>
     );
   }
-  return (
-    <img
-      src={file.publicUrl}
-      alt=""
-      loading="lazy"
-      className={className ?? "size-full object-cover"}
-    />
-  );
+  return <img src={file.publicUrl} alt="" loading="lazy" className={thumbClass} />;
 }
 
 interface CardProps {

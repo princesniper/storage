@@ -20,7 +20,8 @@ import { formatSequence } from "@/lib/media-url";
 import { isRawMime } from "@/lib/env";
 import { telegramService } from "@/services/telegram";
 import { logger } from "@/lib/logger";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
+import { parseByteRange } from "@/lib/http-range";
 
 export const NEGATIVE_TTL = 60; // seconds — short cache for missing files
 export const PUBLIC_TTL = 86400; // 24h public cache
@@ -67,7 +68,7 @@ export function cacheKeyFor(sequenceNumber: number): string {
   return formatSequence(sequenceNumber);
 }
 
-export async function respondWithFileBytes(file: ServableFile, req: Request): Promise<Response> {
+export async function respondWithFileBytes(file: ServableFile, req: Request, correlationId?: string, requestStartedAt?: number): Promise<Response> {
   const publicId = cacheKeyFor(file.sequenceNumber);
   const isVideo = file.mimeType.startsWith("video/");
   const isAudio = file.mimeType.startsWith("audio/");
@@ -98,13 +99,39 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
     });
   }
 
+  if (isVideo && !rangeHeader) {
+    const size = Number(file.size);
+    let offset = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (offset >= size) { controller.close(); return; }
+        const start = offset;
+        const end = Math.min(size - 1, start + MAX_VIDEO_RANGE_BYTES - 1);
+        try {
+          const result = await telegramService.downloadFileRange(file.storageChannel.telegramChannelId, file.telegramMessageId, file.telegramFileId, file.telegramFileReference, start, end, file.telegramAccessHash ?? undefined);
+          if (result.bytes.length !== end - start + 1) throw new Error("RANGE_INCOMPLETE");
+          offset += result.bytes.length;
+          if (result.refreshedReferenceB64 && result.refreshedReferenceB64 !== file.telegramFileReference) {
+            file.telegramFileReference = result.refreshedReferenceB64;
+            void db.file.update({ where: { id: file.id }, data: { telegramFileReference: result.refreshedReferenceB64 } }).catch(() => {});
+          }
+          controller.enqueue(new Uint8Array(result.bytes));
+        } catch (error) { controller.error(error); }
+      },
+    });
+    return new Response(stream, { status: 200, headers: {
+      "Content-Type": file.mimeType, "Content-Length": String(size), "Accept-Ranges": "bytes",
+      "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", "Access-Control-Allow-Origin": "*",
+      ...(file.sha256 ? { "ETag": "\"" + file.sha256 + "\"" } : {}),
+    }});
+  }
   let bytes: Buffer;
   let refreshedReferenceB64: string | undefined;
   try {
     // Video requests normally arrive with HTTP Range. Fetch only that range
     // from Telegram instead of downloading the entire video before responding.
     if (supportsRange && rangeHeader) {
-      const parsed = parseRange(rangeHeader, Number(file.size));
+      const parsed = parseByteRange(rangeHeader, Number(file.size));
       if (!parsed) {
         return new Response(JSON.stringify({ error: "INVALID_RANGE" }), {
           status: 416,
@@ -117,6 +144,8 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
       }
       const rangeLimit = isRaw ? MAX_RAW_RANGE_BYTES : MAX_VIDEO_RANGE_BYTES;
       const requestedEnd = Math.min(parsed.end, parsed.start + rangeLimit - 1);
+      const requestId = correlationId ?? randomBytes(8).toString("hex");
+      const rangeStartedAt = Date.now();
       const result = await telegramService.downloadFileRange(
         file.storageChannel.telegramChannelId,
         file.telegramMessageId,
@@ -124,7 +153,8 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
         file.telegramFileReference,
         parsed.start,
         requestedEnd,
-        file.telegramAccessHash ?? undefined
+        file.telegramAccessHash ?? undefined,
+        requestId
       );
       bytes = result.bytes;
       refreshedReferenceB64 = result.refreshedReferenceB64;
@@ -135,6 +165,7 @@ export async function respondWithFileBytes(file: ServableFile, req: Request): Pr
         });
       }
       const actualLength = bytes.length;
+      logger.info("canonical media range served", { requestId, sequenceNumber: file.sequenceNumber, rangeStart: parsed.start, rangeEnd: parsed.start + actualLength - 1, requestedBytes: requestedEnd - parsed.start + 1, responseBytes: actualLength, fileSize: Number(file.size), telegramRangeMs: Date.now() - rangeStartedAt, totalRouteMs: Date.now() - (requestStartedAt ?? rangeStartedAt), status: 206, cacheHit: false });
       return new Response(toStream(bytes), {
         status: 206,
         headers: {
@@ -247,7 +278,7 @@ function serveBytes(
   }
 
   // HTTP Range support for range-capable media (video/audio/RAW preview reads)
-  const parsed = parseRange(rangeHeader, size);
+  const parsed = parseByteRange(rangeHeader, size);
   if (!parsed) {
     return new Response(JSON.stringify({ error: "INVALID_RANGE" }), {
       status: 416,
@@ -269,31 +300,6 @@ function serveBytes(
       "Content-Length": String(slice.length),
     },
   });
-}
-
-function parseRange(header: string, size: number): { start: number; end: number } | null {
-  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!m) return null;
-  const [, startStr, endStr] = m;
-  let start: number;
-  let end: number;
-  if (startStr === "" && endStr === "") return null;
-  if (startStr === "") {
-    // suffix range: last N bytes
-    const suffix = Number(endStr);
-    if (!Number.isFinite(suffix) || suffix <= 0) return null;
-    start = Math.max(0, size - suffix);
-    end = size - 1;
-  } else {
-    start = Number(startStr);
-    end = endStr === "" ? size - 1 : Number(endStr);
-  }
-  if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
-  if (size <= 0 || start >= size || start < 0 || start > end) return null;
-  // RFC 7233 permits an explicit end beyond the representation length; clamp
-  // it to the last byte instead of incorrectly returning 416.
-  end = Math.min(end, size - 1);
-  return { start, end };
 }
 
 function toStream(buf: Buffer): ReadableStream {
