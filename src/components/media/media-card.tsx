@@ -146,7 +146,11 @@ export function MediaCard({ file, index = 0, selected, selectionMode, onSelect, 
       onPointerCancel={handlePointerCancel}
       onContextMenu={handleContextMenu}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpen(); }
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          if (selectionMode && onSelect && file.status === "active") onSelect();
+          else handleOpen();
+        }
       }}
     >
       {/* ─── Media canvas (no zoom-on-hover: ops grid stays calm) ─── */}
