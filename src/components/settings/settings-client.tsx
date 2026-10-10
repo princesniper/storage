@@ -132,7 +132,7 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="page-workspace space-y-6 max-w-4xl">
       <PageHeader
         title="Settings"
         description="Account, storage connection and system information."
@@ -165,10 +165,10 @@ export default function SettingsClient({ adminEmail, storageStatus, storageError
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center justify-between gap-2 flex-wrap rounded-xl border border-border bg-muted/20 px-3 py-2.5">
+          <div className="clay-status-panel flex items-center justify-between gap-2 flex-wrap px-3 py-2.5">
             <div className="flex items-center gap-2">
               {connected ? (
-                <ShieldCheck className="size-4 text-emerald-500" aria-hidden />
+                <ShieldCheck className="size-4 text-status-completed" aria-hidden />
               ) : (
                 <ShieldAlert className="size-4 text-amber-500" aria-hidden />
               )}
@@ -322,7 +322,7 @@ function StepIndicator({ current }: { current: Step }) {
                 className={cn(
                   "size-6 rounded-full text-[11px] font-semibold flex items-center justify-center transition-all duration-200 shrink-0",
                   done
-                    ? "bg-emerald-500 text-white"
+                    ? "bg-status-completed text-white"
                     : active
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground"
@@ -336,7 +336,7 @@ function StepIndicator({ current }: { current: Step }) {
               </span>
             </span>
             {i < STEPS.length - 1 && (
-              <span className={cn("h-px flex-1 mx-1 transition-colors", done ? "bg-emerald-500" : "bg-border")} aria-hidden />
+              <span className={cn("h-px flex-1 mx-1 transition-colors", done ? "bg-status-completed" : "bg-border")} aria-hidden />
             )}
           </li>
         );

@@ -49,7 +49,7 @@ export function CopyButton({
       size={size === "icon" ? "icon" : size}
       variant={variant}
       onClick={handle}
-      className={cn("transition-colors", copied && "text-emerald-500", className)}
+      className={cn("transition-colors", copied && "text-status-completed", className)}
       aria-label={copied ? "Copied" : label}
       title={copied ? "Copied" : label}
     >

@@ -55,12 +55,12 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      {/* Emerald radial ambient backlight */}
+      {/* Soft primary ambient backlight */}
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden
         style={{
-          background: "radial-gradient(ellipse 60% 50% at 50% 0%, rgba(34,197,94,0.06) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse 60% 50% at 50% 0%, color-mix(in srgb, var(--primary) 9%, transparent) 0%, transparent 70%)",
         }}
       />
 
@@ -68,19 +68,19 @@ export default function LoginPage() {
         {/* Brand mark */}
         <div className="flex flex-col items-center gap-4 animate-page-enter">
           <div className="relative">
-            <div className="size-16 rounded-2xl bg-emerald-500/12 border border-emerald-500/25 flex items-center justify-center shadow-lg">
-              <Leaf className="size-7 text-emerald-400" aria-hidden />
+            <div className="clay-brand-mark size-16 rounded-2xl bg-primary/12 border border-primary/25 flex items-center justify-center">
+              <Leaf className="size-7 text-primary" aria-hidden />
             </div>
             {/* Glow ring */}
             <div
               className="absolute inset-0 rounded-2xl pointer-events-none"
               aria-hidden
-              style={{ boxShadow: "0 0 32px rgba(34,197,94,0.15)" }}
+              style={{ boxShadow: "var(--clay-raised-sm)" }}
             />
           </div>
           <div className="text-center">
             <h1 className="text-2xl font-semibold tracking-tight">
-              GrowPlants<span className="text-emerald-400"> Media</span>
+              GrowPlants<span className="text-primary"> Media</span>
             </h1>
             <p className="text-sm text-muted-foreground mt-1.5">
               Private media infrastructure
@@ -90,7 +90,7 @@ export default function LoginPage() {
 
         {/* Login card */}
         <div
-          className="animate-page-enter rounded-xl border border-border bg-card shadow-2xl shadow-black/40 overflow-hidden"
+          className="clay-panel animate-page-enter overflow-hidden rounded-[24px]"
           style={{ "--enter-delay": "80ms" } as React.CSSProperties}
         >
           <div className="px-6 pt-6 pb-2 border-b border-border">
@@ -112,7 +112,7 @@ export default function LoginPage() {
                   placeholder="admin@example.com"
                   required
                   autoFocus
-                  className="bg-muted/40 border-border focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-colors h-10"
+                  className="bg-muted/40 border-border focus:border-ring transition-colors h-10"
                 />
               </div>
               <div className="space-y-1.5">
@@ -128,7 +128,7 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="pr-10 bg-muted/40 border-border focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-colors h-10"
+                    className="pr-10 bg-muted/40 border-border focus:border-ring transition-colors h-10"
                   />
                   <Button
                     type="button"
@@ -154,7 +154,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full h-10 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-semibold transition-all duration-150 shadow-lg shadow-emerald-500/20 mt-2"
+                className="w-full h-10 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold transition-all duration-150 mt-2"
               >
                 {loading && <Loader2 className="size-4 animate-spin mr-2" aria-hidden />}
                 {loading ? "Signing in…" : "Sign in"}

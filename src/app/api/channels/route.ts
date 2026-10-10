@@ -8,6 +8,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { invalidateAnalyticsCache } from "@/lib/analytics-cache";
 import { telegramService } from "@/services/telegram";
 import { audit } from "@/services/audit";
 import { NextResponse } from "next/server";
@@ -20,6 +21,8 @@ export async function GET() {
   await telegramService.ensureStarted();
 
   const channels = await db.storageChannel.findMany({
+    // Removed registrations stay stored for reconnect/mapping safety.
+    where: { status: { not: "removed" } },
     orderBy: { createdAt: "asc" },
     include: { _count: { select: { files: true } } },
   });
@@ -39,7 +42,7 @@ export async function GET() {
     })),
     storageStatus: telegramService.getStatus(),
     telegramStatus: telegramService.getStatus(),
-  });
+  }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }
 
 const postBody = z.object({
@@ -71,7 +74,7 @@ export async function POST(req: Request) {
   // A channel may have been removed from the UI previously. Never create a
   // second record for the same Telegram channel: reactivate the existing
   // record so its File rows and Folder relationships become visible again.
-  const existing = await db.storageChannel.findFirst({
+  const existing = await db.storageChannel.findUnique({
     where: { telegramChannelId: parsed.destinationId },
   });
 
@@ -93,32 +96,35 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "NO_STORAGE_ACCOUNT" }, { status: 400 });
   }
 
-  const channel = existing
-    ? await db.storageChannel.update({
-        where: { id: existing.id },
-        data: {
-          telegramAccountId: acc.id,
-          name: parsed.name,
-          purpose: parsed.purpose ?? existing.purpose,
-          status: "active",
-          lastTestedAt: new Date(),
-          lastTestOk: true,
-          lastTestLatencyMs: test.latencyMs,
-          lastTestError: null,
-        },
-      })
-    : await db.storageChannel.create({
-        data: {
-          telegramAccountId: acc.id,
-          name: parsed.name,
-          telegramChannelId: parsed.destinationId,
-          purpose: parsed.purpose ?? null,
-          status: "active",
-          lastTestedAt: new Date(),
-          lastTestOk: true,
-          lastTestLatencyMs: test.latencyMs,
-        },
-      });
+  // Upsert on the unique Telegram channel ID is atomic under concurrent
+  // reconnect requests. When a removed registration exists, this updates the
+  // same StorageChannel row and preserves every File/Folder/sequence relation.
+  const testedAt = new Date();
+  const channel = await db.storageChannel.upsert({
+    where: { telegramChannelId: parsed.destinationId },
+    update: {
+      telegramAccountId: acc.id,
+      name: parsed.name,
+      ...(parsed.purpose !== undefined ? { purpose: parsed.purpose } : {}),
+      status: "active",
+      lastTestedAt: testedAt,
+      lastTestOk: true,
+      lastTestLatencyMs: test.latencyMs,
+      lastTestError: null,
+    },
+    create: {
+      telegramAccountId: acc.id,
+      name: parsed.name,
+      telegramChannelId: parsed.destinationId,
+      purpose: parsed.purpose ?? null,
+      status: "active",
+      lastTestedAt: testedAt,
+      lastTestOk: true,
+      lastTestLatencyMs: test.latencyMs,
+    },
+  });
+
+  invalidateAnalyticsCache();
 
   await audit({
     operation: existing ? "CHANNEL_RECONNECT" : "CHANNEL_ADD",
@@ -132,5 +138,5 @@ export async function POST(req: Request) {
     },
   });
 
-  return NextResponse.json({ channel }, { status: 201 });
+  return NextResponse.json({ channel, restoredExistingData: Boolean(existing) }, { status: existing ? 200 : 201, headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }

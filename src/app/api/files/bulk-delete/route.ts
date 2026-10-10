@@ -7,11 +7,13 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { withNonRemovedStorageChannel } from "@/lib/active-library";
 import { telegramService } from "@/services/telegram";
 import { audit } from "@/services/audit";
 import { cache } from "@/lib/cache";
 import { formatSequence } from "@/lib/media-url";
-import { rateLimit } from "@/services/rate-limit";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -24,11 +26,11 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
+  const ip = getClientIp(req.headers);
   const adminEmail = (session.user as { email?: string }).email ?? "";
 
   // Rate limit: 10 bulk-delete calls/min/admin
-  const rl = rateLimit(`bulk-delete:${ip}`, 10, 60_000);
+  const rl = await rateLimitAsync(`bulk-delete:${ip}`, 10, 60_000);
   if (!rl.ok) {
     return NextResponse.json(
       { error: "RATE_LIMITED", retryAfterMs: rl.resetMs },
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
 
   // Fetch all requested files with channel info
   const files = await db.file.findMany({
-    where: { id: { in: ids } },
+    where: withNonRemovedStorageChannel({ id: { in: ids } }),
     include: { storageChannel: { select: { telegramChannelId: true } } },
   });
   const byId = new Map(files.map((f) => [f.id, f]));

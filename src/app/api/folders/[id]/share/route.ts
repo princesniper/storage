@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds } from "@/lib/active-library";
 import { createFolderShareToken, decryptFolderShareToken, encryptFolderShareToken, hashFolderShareToken } from "@/lib/folder-share";
 import { NextResponse } from "next/server";
 
@@ -34,6 +35,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const id = parseId((await ctx.params).id);
   if (!id) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(id)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const folder = await db.folder.findUnique({ where: { id }, select: { id: true } });
   if (!folder) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   try {
@@ -76,6 +79,8 @@ export async function POST(_req: Request, ctx: RouteContext) {
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const id = parseId((await ctx.params).id);
   if (!id) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(id)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const folder = await db.folder.findUnique({ where: { id }, select: { id: true, name: true } });
   if (!folder) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const token = createFolderShareToken();

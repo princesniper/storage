@@ -6,7 +6,10 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { rateLimit } from "@/services/rate-limit";
+import { withNonRemovedStorageChannel } from "@/lib/active-library";
+import { getCachedAnalytics, setCachedAnalytics } from "@/lib/analytics-cache";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
 import { canonicalUrl } from "@/lib/media-url";
@@ -16,20 +19,14 @@ const querySchema = z.object({
   days: z.coerce.number().int().min(1).max(90).optional().default(30),
 });
 
-interface Cached {
-  data: unknown;
-  expires: number;
-  key: string;
-}
-let cacheEntry: Cached | null = null;
 const CACHE_MS = 5 * 60 * 1000;
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  if (!rateLimit(`analytics:${ip}`, 60, 60_000).ok) {
+  const ip = getClientIp(req.headers);
+  if (!(await rateLimitAsync(`analytics:${ip}`, 60, 60_000)).ok) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
 
@@ -39,30 +36,37 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "INVALID_QUERY" }, { status: 400 });
   }
   const { days } = parsed.data;
-  const cacheKey = `days=${days}`;
-
-  if (cacheEntry && cacheEntry.key === cacheKey && Date.now() < cacheEntry.expires) {
-    return NextResponse.json(cacheEntry.data);
-  }
 
   try {
+    // Include channel state in the key as a cross-route invalidation safeguard.
+    // Even if Next.js bundles route modules separately, a status/label change
+    // yields a fresh key and bypasses a cached overview for the old library.
+    const channelState = await db.storageChannel.findMany({
+      orderBy: { id: "asc" },
+      select: { id: true, name: true, status: true, updatedAt: true },
+    });
+    const cacheKey = `days=${days};channels=${JSON.stringify(channelState.map((c) => [c.id, c.name, c.status, c.updatedAt.toISOString()]))}`;
+    const cached = getCachedAnalytics(cacheKey);
+    if (cached !== null) return NextResponse.json(cached, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+    const channels = channelState.filter((channel) => channel.status !== "removed").map(({ id, name }) => ({ id, name }));
+
     const since = new Date();
     since.setDate(since.getDate() - (days - 1));
     since.setHours(0, 0, 0, 0);
 
-    const [channels, statusGroups, mimeGroups, topFiles, uploadLogs] = await Promise.all([
-      db.storageChannel.findMany({ select: { id: true, name: true } }),
+    const [statusGroups, mimeGroups, topFiles, uploadLogs] = await Promise.all([
       db.file.groupBy({
         by: ["storageChannelId", "status"],
+        where: withNonRemovedStorageChannel({}),
         _count: { _all: true },
       }),
       db.file.groupBy({
         by: ["mimeType"],
-        where: { status: "active" },
+        where: withNonRemovedStorageChannel({ status: "active" }),
         _count: { _all: true },
       }),
       db.file.findMany({
-        where: { status: "active" },
+        where: withNonRemovedStorageChannel({ status: "active" }),
         orderBy: { size: "desc" },
         take: 10,
         select: {
@@ -77,7 +81,14 @@ export async function GET(req: Request) {
         },
       }),
       db.uploadLog.findMany({
-        where: { operation: "UPLOAD", createdAt: { gte: since } },
+        where: {
+          operation: "UPLOAD",
+          createdAt: { gte: since },
+          OR: [
+            { fileId: null },
+            { file: { is: { storageChannel: { is: { status: { not: "removed" } } } } } },
+          ],
+        },
         select: { status: true, createdAt: true },
       }),
     ]);
@@ -141,8 +152,8 @@ export async function GET(req: Request) {
       })),
     };
 
-    cacheEntry = { data, expires: Date.now() + CACHE_MS, key: cacheKey };
-    return NextResponse.json(data);
+    setCachedAnalytics(cacheKey, data, CACHE_MS);
+    return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
   } catch (e) {
     logger.error("analytics overview failed", {
       err: e instanceof Error ? e.message : String(e),

@@ -1,22 +1,29 @@
 /**
- * Next.js instrumentation hook — runs once in the Node.js server process
- * at boot, before the standalone server starts accepting traffic.
+ * Production-only Next.js instrumentation hook.
  *
- * Single responsibility: install the graceful-shutdown drain
- * (see src/lib/shutdown.ts) so Fly's SIGTERM/SIGINT lets in-flight
- * uploads/downloads finish instead of killing them mid-request.
- *
- * - Guarded to the nodejs runtime (this hook never runs useful work on Edge).
- * - Dynamic import keeps node-only code out of any Edge bundle.
- * - No Telegram, DB, or cache work here — connection stays lazy as designed.
+ * Installs graceful shutdown and production media workers. These workers are
+ * deliberately not imported or started in local development: a local test
+ * session can use a different Telegram account than the production storage
+ * channel, and should not run background jobs against a production inventory.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
-    const { initGracefulShutdown } = await import("./lib/shutdown");
-    const { startDngPreviewWorker } = await import("./lib/dng-preview");
-    const { startVideoThumbnailWorker } = await import("./lib/video-thumbnail");
-    initGracefulShutdown();
-    startDngPreviewWorker();
-    startVideoThumbnailWorker();
+  // Keep heavy server-side media workers out of the local dev startup path.
+  // They are required only by the deployed Node.js runtime.
+  const runningOnProductionPlatform = Boolean(
+    process.env.RAILWAY_ENVIRONMENT ||
+    process.env.RAILWAY_PROJECT_ID ||
+    process.env.RAILWAY_SERVICE_ID ||
+    process.env.FLY_APP_NAME,
+  );
+  if (process.env.NEXT_RUNTIME !== "nodejs" || process.env.NODE_ENV !== "production" || !runningOnProductionPlatform) {
+    return;
   }
+
+  const { initGracefulShutdown } = await import("./lib/shutdown");
+  const { startDngPreviewWorker } = await import("./lib/dng-preview");
+  const { startVideoThumbnailWorker } = await import("./lib/video-thumbnail");
+
+  initGracefulShutdown();
+  startDngPreviewWorker();
+  startVideoThumbnailWorker();
 }

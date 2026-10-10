@@ -386,10 +386,10 @@ export default function UploadClient() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="page-workspace space-y-6">
       <PageHeader
         title="Upload Media"
-        description="Add assets to your media infrastructure · no app-level batch or folder storage cap."
+        description="Add media to your library. Large files use the existing resumable upload flow."
         actions={
           <Button type="button" size="sm" variant="outline" onClick={() => router.push("/files")}>
             View library
@@ -419,7 +419,8 @@ export default function UploadClient() {
         <StepDot n={3} label="Upload" done={allDone} />
       </ol>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
+        <section className="clay-panel grid gap-5 p-4 md:grid-cols-2 md:p-5" aria-label="Upload settings">
         <div className="space-y-2">
           <Label htmlFor="channel">Storage Destination</Label>
           <Select value={channelId} onValueChange={setChannelId}>
@@ -450,6 +451,7 @@ export default function UploadClient() {
             Image compression runs locally in your browser. Videos are always uploaded original.
           </p>
         </div>
+        </section>
 
         {/* ─── Drop zone ─── */}
         <div
@@ -459,19 +461,20 @@ export default function UploadClient() {
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={onDrop}
+          data-drag-over={dragOver ? "true" : "false"}
           className={cn(
-            "relative border-2 border-dashed rounded-xl p-8 md:p-12 text-center overflow-hidden",
+            "clay-dropzone relative border-2 border-dashed p-8 md:p-12 text-center overflow-hidden",
             "duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,border-color]",
             dragOver
-              ? "border-emerald-500 bg-emerald-500/5"
-              : "border-white/[0.1] hover:border-white/[0.2] hover:bg-white/[0.02]"
+              ? "border-primary bg-primary/8"
+              : "border-border hover:border-primary/40 hover:bg-primary/5"
           )}
         >
           {/* Radial glow on dragover */}
           {dragOver && (
             <div
               className="pointer-events-none absolute inset-0 rounded-xl"
-              style={{ background: "radial-gradient(ellipse 80% 60% at 50% 100%, rgba(34,197,94,0.08) 0%, transparent 70%)" }}
+              style={{ background: "radial-gradient(ellipse 80% 60% at 50% 100%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 70%)" }}
               aria-hidden
             />
           )}
@@ -530,7 +533,7 @@ export default function UploadClient() {
               <div
                 key={item.key}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border bg-card p-3 duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[border-color,background-color]",
+                  "clay-upload-row flex items-center gap-3 rounded-xl border p-3 duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[border-color,background-color]",
                   item.status === "failed" ? "border-red-500/25" : "border-border"
                 )}
               >
@@ -624,7 +627,7 @@ export default function UploadClient() {
                     <X className="size-4" aria-hidden />
                   </Button>
                 )}
-                {item.status === "success" && <CheckCircle2 className="size-5 shrink-0 text-emerald-500 animate-success-pop" aria-hidden />}
+                {item.status === "success" && <CheckCircle2 className="size-5 shrink-0 text-status-completed animate-success-pop" aria-hidden />}
                 {item.status === "skipped" && <CheckCircle2 className="size-5 shrink-0 text-amber-500" aria-hidden />}
               </div>
             ))}
@@ -640,17 +643,17 @@ export default function UploadClient() {
 
         {/* ─── Single-file success card ─── */}
         {singleMode && succeeded.length === 1 && allDone && (
-          <Card tier="informational" className="border-emerald-500/25 overflow-hidden">
+          <Card tier="informational" className="border-status-completed/30 overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="size-5 text-emerald-400 animate-success-pop" aria-hidden />
+                <CheckCircle2 className="size-5 text-status-completed animate-success-pop" aria-hidden />
                 Media ready
               </CardTitle>
               <p className="text-xs text-muted-foreground">Your file is live on the public CDN.</p>
             </CardHeader>
             <CardContent className="space-y-4">
               {succeeded[0].preview && (
-                <img src={succeeded[0].preview} alt="" className="rounded-xl max-h-52 object-contain bg-black/20 w-full" />
+                <img src={succeeded[0].preview} alt="" className="rounded-xl max-h-52 object-contain bg-muted w-full" />
               )}
               <div className="space-y-1">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">File</div>
@@ -658,7 +661,7 @@ export default function UploadClient() {
               </div>
               <div className="space-y-2">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">Canonical Public URL</div>
-                <code className="block w-full text-xs px-3 py-2.5 bg-black/30 rounded-lg font-mono break-all border border-white/[0.08] text-emerald-300">
+                <code className="block w-full text-xs px-3 py-2.5 bg-muted rounded-lg font-mono break-all border border-border text-foreground">
                   {succeeded[0].url}
                 </code>
                 <div className="flex gap-2 flex-wrap">
@@ -710,7 +713,7 @@ export default function UploadClient() {
                 {failed.length > 0 ? (
                   <CircleX className="size-4 text-red-400" aria-hidden />
                 ) : (
-                  <CheckCircle2 className="size-4 text-emerald-400 animate-success-pop" aria-hidden />
+                  <CheckCircle2 className="size-4 text-status-completed animate-success-pop" aria-hidden />
                 )}
                 {succeeded.length} uploaded, {skipped.length} duplicates skipped, {failed.length} failed
               </CardTitle>
@@ -759,7 +762,7 @@ function StepDot({ n, label, done }: { n: number; label: string; done: boolean }
       <span
         className={cn(
           "size-5 rounded-full text-[10px] font-semibold flex items-center justify-center duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,color]",
-          done ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+          done ? "bg-status-completed text-white" : "bg-muted text-muted-foreground"
         )}
         aria-hidden
       >

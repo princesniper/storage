@@ -7,6 +7,8 @@ import { maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isRawMime, isVide
 import { rawMimeFromName } from "@/lib/raw";
 import { createUploadManifest, RAW_RESUMABLE_CHUNK_SIZE, RESUMABLE_CHUNK_SIZE } from "@/lib/resumable-upload";
 import { MAX_RAW_RESUMABLE_CHUNKS, MAX_RESUMABLE_CHUNKS } from "@/lib/upload-limits";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 
 const schema = z.object({
   fileName: z.string().min(1).max(255),
@@ -28,6 +30,10 @@ function validRelativePath(value: string | null | undefined) {
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const ip = getClientIp(req.headers);
+  const userId = (session.user as { id?: string; email?: string }).id ?? session.user.email ?? "admin";
+  const limit = await rateLimitAsync("upload-session:" + userId + ":" + ip, 10, 15 * 60_000);
+  if (!limit.ok) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil(limit.resetMs / 1000))) } });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "INVALID_REQUEST", detail: parsed.error.message }, { status: 400 });

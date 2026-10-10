@@ -15,6 +15,8 @@ import { logger } from "@/lib/logger";
 import { sha256File } from "@/lib/content-hash";
 import { reserveUploadHash, releaseUploadReservation } from "@/lib/upload-dedup";
 import * as path from "path";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import {
   assembleUpload,
   cleanupUpload,
@@ -250,6 +252,10 @@ async function processUpload(uploadId: string, assembled: string, adminEmail: st
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const ip = getClientIp(req.headers);
+  const userId = (session.user as { id?: string; email?: string }).id ?? session.user.email ?? "admin";
+  const limit = await rateLimitAsync("upload-complete:" + userId + ":" + ip, 10, 60_000);
+  if (!limit.ok) return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429, headers: { "Retry-After": String(Math.max(1, Math.ceil(limit.resetMs / 1000))) } });
 
   const adminEmail = (session.user as { email?: string }).email ?? "unknown";
   const body = await req.json().catch(() => null) as { uploadId?: string } | null;

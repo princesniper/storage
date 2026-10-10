@@ -14,8 +14,8 @@ export type CardTier = "actionable" | "informational";
 
 export const cardTierClasses: Record<CardTier, string> = {
   actionable:
-    "border-white/[0.12] shadow-[0_12px_32px_-12px_rgba(0,0,0,0.6)]",
-  informational: "border-white/[0.07] shadow-sm",
+    "border-primary/25 shadow-[var(--clay-shadow-hover)]",
+  informational: "border-border shadow-[var(--clay-shadow-raised)]",
 };
 
 function Card({

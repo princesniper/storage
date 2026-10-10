@@ -15,6 +15,12 @@ export default withAuth(
     // Add security headers
     const res = NextResponse.next();
     res.headers.set("X-Content-Type-Options", "nosniff");
+    // Report-only first: inventory violations before enforcing a policy that
+    // could affect Next.js scripts, previews, or external media.
+    res.headers.set(
+      "Content-Security-Policy-Report-Only",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:; font-src 'self' data: https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+    );
     res.headers.set("X-Frame-Options", "DENY");
     res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     res.headers.set("Permissions-Policy", "geolocation=(), microphone=(), camera=()");

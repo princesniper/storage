@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { cache } from "@/lib/cache";
 import { formatSequence } from "@/lib/media-url";
 import { telegramService } from "@/services/telegram";
@@ -20,7 +21,8 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return NextResponse.json({ error: "DOWNLOAD_LIMIT", detail: "Select between 1 and 25 folders per archive." }, { status: 400 });
   const ids = [...new Set(parsed.data.ids)];
-  const folders = await db.folder.findMany({ select: { id: true, name: true, parentId: true } });
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  const folders = await db.folder.findMany({ where: { id: { in: [...visibleFolderIds] } }, select: { id: true, name: true, parentId: true } });
   const byId = new Map(folders.map(f => [f.id, f]));
   if (ids.some(id => !byId.has(id))) return NextResponse.json({ error: "FOLDER_UNAVAILABLE", detail: "One or more folders are unavailable. Refresh and retry." }, { status: 409 });
   const selected = new Set(ids);
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
   const included = folders.filter(f => rootFor(f.id) !== null);
   const treeIds = included.map(f => f.id);
   const files = await db.file.findMany({
-    where: { folderId: { in: treeIds }, status: "active" },
+    where: withNonRemovedStorageChannel({ folderId: { in: treeIds }, status: "active" }),
     select: { id: true, folderId: true, originalName: true, mimeType: true, size: true, sequenceNumber: true, publicId: true, telegramMessageId: true, telegramFileReference: true, storageChannel: { select: { telegramChannelId: true } } },
     orderBy: [{ folderId: "asc" }, { originalName: "asc" }],
   });

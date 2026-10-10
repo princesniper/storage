@@ -6,6 +6,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -21,6 +22,33 @@ const patchSchema = z.object({
 function parseId(value: string): number | null {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+async function getSubtreeFolderIds(folderId: number): Promise<number[]> {
+  const allFolders = await db.folder.findMany({ select: { id: true, parentId: true } });
+  const ids = new Set<number>([folderId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const folder of allFolders) {
+      if (folder.parentId !== null && ids.has(folder.parentId) && !ids.has(folder.id)) {
+        ids.add(folder.id);
+        changed = true;
+      }
+    }
+  }
+  return [...ids];
+}
+
+async function subtreeContainsRemovedChannelFiles(folderIds: number[]): Promise<boolean> {
+  const file = await db.file.findFirst({
+    where: {
+      folderId: { in: folderIds },
+      storageChannel: { is: { status: "removed" } },
+    },
+    select: { id: true },
+  });
+  return Boolean(file);
 }
 
 async function hasAncestor(folderId: number, candidateParentId: number): Promise<boolean> {
@@ -43,16 +71,22 @@ export async function GET(_req: Request, ctx: RouteContext) {
   const id = parseId((await ctx.params).id);
   if (!id) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
 
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(id)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+
   const folder = await db.folder.findUnique({
     where: { id },
-    include: {
-      parent: { select: { id: true, name: true, parentId: true } },
-      _count: { select: { children: true, files: true } },
-    },
+    include: { parent: { select: { id: true, name: true, parentId: true } } },
   });
   if (!folder) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  const [childFolderCount, visibleFileCount] = await Promise.all([
+    db.folder.count({ where: { parentId: id, id: { in: [...visibleFolderIds] } } }),
+    db.file.count({ where: withNonRemovedStorageChannel({ folderId: id, status: "active" }) }),
+  ]);
 
-  return NextResponse.json({ folder });
+  return NextResponse.json({
+    folder: { ...folder, _count: { children: childFolderCount, files: visibleFileCount } },
+  }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }
 
 export async function PATCH(req: Request, ctx: RouteContext) {
@@ -72,8 +106,17 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     }, { status: 400 });
   }
 
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(id)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const existing = await db.folder.findUnique({ where: { id }, select: { id: true, parentId: true } });
   if (!existing) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (body.parentId != null && !visibleFolderIds.has(body.parentId)) {
+    return NextResponse.json({ error: "PARENT_NOT_FOUND" }, { status: 404 });
+  }
+  const movedSubtreeIds = await getSubtreeFolderIds(id);
+  if (await subtreeContainsRemovedChannelFiles(movedSubtreeIds)) {
+    return NextResponse.json({ error: "FOLDER_HAS_REMOVED_CHANNEL_DATA", detail: "This folder tree includes preserved media from a removed storage channel. Reconnect that channel before restructuring this tree." }, { status: 409 });
+  }
 
   if (body.parentId !== undefined && body.parentId !== null) {
     if (body.parentId === id || await hasAncestor(id, body.parentId)) {
@@ -108,6 +151,8 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
   const id = parseId((await ctx.params).id);
   if (!id) return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
 
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(id)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const existing = await db.folder.findUnique({ where: { id }, select: { id: true, name: true } });
   if (!existing) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
@@ -126,8 +171,12 @@ export async function DELETE(_req: Request, ctx: RouteContext) {
     }
   }
 
+  if (await subtreeContainsRemovedChannelFiles([...folderIds])) {
+    return NextResponse.json({ error: "FOLDER_HAS_REMOVED_CHANNEL_DATA", detail: "This folder tree includes preserved media from a removed storage channel. Reconnect that channel before deleting the tree." }, { status: 409 });
+  }
+
   const files = await db.file.findMany({
-    where: { folderId: { in: [...folderIds] }, status: { not: "deleted" } },
+    where: withNonRemovedStorageChannel({ folderId: { in: [...folderIds] }, status: { not: "deleted" } }),
     select: {
       id: true,
       publicId: true,

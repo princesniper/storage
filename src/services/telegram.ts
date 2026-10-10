@@ -973,10 +973,10 @@ class TelegramServiceImpl {
     const start = Date.now();
     try {
       const peer = await this.resolvePeer(peerId);
-      const testMsg = await this.client.sendMessage(peer, {
-        message: "[Connection test] This message will be deleted automatically.",
-      });
-      await this.client.deleteMessages(peer, [testMsg.id], { revoke: true });
+      // Verify access without posting/deleting a Telegram message. Connecting a
+      // channel must not create visible test traffic or mutate channel history.
+      // An empty channel is valid: getMessages may return an empty collection.
+      await this.client.getMessages(peer, { limit: 1 });
       return { ok: true, latencyMs: Date.now() - start };
     } catch (err) {
       return {

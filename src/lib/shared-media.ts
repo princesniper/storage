@@ -1,12 +1,13 @@
 import { db } from "@/lib/db";
+import { withNonRemovedStorageChannel } from "@/lib/active-library";
 import { cache } from "@/lib/cache";
 import { formatSequence } from "@/lib/media-url";
 import { telegramService } from "@/services/telegram";
 
 export async function findSharedFile(fileId: number, folderIds: Set<number>) {
   if (!Number.isInteger(fileId) || fileId <= 0) return null;
-  const file = await db.file.findUnique({
-    where: { id: fileId },
+  const file = await db.file.findFirst({
+    where: withNonRemovedStorageChannel({ id: fileId, status: "active" }),
     select: {
       id: true, originalName: true, mimeType: true, extension: true, size: true,
       sequenceNumber: true, status: true, telegramMessageId: true, telegramFileId: true,

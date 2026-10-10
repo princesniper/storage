@@ -22,6 +22,42 @@ export type UploadManifest = {
 };
 
 const ROOT = path.join(os.tmpdir(), "growplants-resumable");
+export const UPLOAD_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+let cleanupRunning: Promise<number> | null = null;
+
+/** Remove only stale upload directories, never active sessions. */
+export async function cleanupExpiredUploads(now = Date.now()): Promise<number> {
+  if (cleanupRunning) return cleanupRunning;
+  cleanupRunning = (async () => {
+    let removed = 0;
+    let entries;
+    try { entries = await fs.readdir(ROOT, { withFileTypes: true }); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/^[0-9a-f-]{36}$/i.test(entry.name)) continue;
+      const dir = path.join(ROOT, entry.name);
+      let stale = false;
+      try {
+        const raw = await fs.readFile(path.join(dir, "manifest.json"), "utf8");
+        const manifest = JSON.parse(raw) as Partial<UploadManifest>;
+        const createdAt = Number(manifest.createdAt);
+        stale = !Number.isFinite(createdAt) || createdAt <= 0 || now - createdAt > UPLOAD_SESSION_TTL_MS;
+      } catch {
+        try { stale = now - (await fs.stat(dir)).mtimeMs > UPLOAD_SESSION_TTL_MS; }
+        catch { continue; }
+      }
+      if (stale) {
+        await fs.rm(dir, { recursive: true, force: true });
+        removed += 1;
+      }
+    }
+    return removed;
+  })().finally(() => { cleanupRunning = null; });
+  return cleanupRunning;
+}
 
 function assertUploadId(uploadId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(uploadId)) throw new Error("Invalid upload id");
@@ -46,6 +82,7 @@ export function assembledPath(uploadId: string) {
 }
 
 export async function createUploadManifest(input: Omit<UploadManifest, "uploadId" | "createdAt">) {
+  await cleanupExpiredUploads();
   await fs.mkdir(path.join(ROOT), { recursive: true });
   const uploadId = randomUUID();
   const dir = uploadDirectory(uploadId);

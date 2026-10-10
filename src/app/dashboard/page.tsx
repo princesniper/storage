@@ -96,7 +96,7 @@ export default async function DashboardPage() {
 
   return (
     <DashboardShell>
-      <div className="space-y-8">
+      <div className="dashboard-workspace page-workspace w-full max-w-full min-w-0 space-y-6 sm:space-y-7">
         {/* ─── 1. Page Header ─── */}
         <PageHeader
           title="Dashboard"
@@ -119,7 +119,7 @@ export default async function DashboardPage() {
 
         {/* ─── 2. Primary KPIs (Tier 2, count-up on totals) ─── */}
         <section aria-label="Primary metrics">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="dashboard-kpi-grid grid min-w-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <StatCard
               icon={ImageIcon}
               label="Total Files"
@@ -136,7 +136,7 @@ export default async function DashboardPage() {
               countUp
               sub={totalFiles > 0 ? `${Math.round((activeFiles / totalFiles) * 100)}% of all files` : "No files yet"}
               href="/files?status=active"
-              iconClassName="text-emerald-500"
+              iconClassName="text-primary"
               delay={80}
             />
             <StatCard
@@ -173,7 +173,7 @@ export default async function DashboardPage() {
           </div>
           <StorageOverview />
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="dashboard-detail-grid grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2">
             {/* storage */}
             <Card tier="informational" className="animate-page-enter">
               <CardHeader className="pb-3">
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
                     <dt className="text-muted-foreground">Channel tests</dt>
                     <dd className="tabular-nums font-medium">
                       {failedTestChannels.length === 0 ? (
-                        <span className="text-emerald-400">All passing</span>
+                        <span className="text-status-completed">All passing</span>
                       ) : (
                         <span className="text-amber-400">{failedTestChannels.length} failing</span>
                       )}
@@ -240,11 +240,11 @@ export default async function DashboardPage() {
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Canonical origin</dt>
-                    <dd className="font-mono text-[11px]">{CANONICAL_MEDIA_ORIGIN}</dd>
+                    <dd className="min-w-0 max-w-full break-all text-right font-mono text-[11px]">{CANONICAL_MEDIA_ORIGIN}</dd>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <dt className="text-muted-foreground">Delivery cache</dt>
-                    <dd className="tabular-nums">
+                    <dd className="min-w-0 max-w-full break-words text-right tabular-nums">
                       {cacheStats.backend === "redis" ? `Redis · ${cacheStats.redisKeys ?? cacheStats.bytesSize} keys` : `In-memory · ${cacheStats.bytesSize} entries`}
                     </dd>
                   </div>
@@ -255,7 +255,7 @@ export default async function DashboardPage() {
                       Latest canonical URL
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <code className="flex-1 text-[11px] px-2 py-1.5 bg-white/[0.03] border border-white/[0.06] rounded-lg font-mono truncate">
+                      <code className="flex-1 text-[11px] px-2 py-1.5 bg-muted border border-border rounded-lg font-mono truncate">
                         {canonicalUrl(recentFiles[0].sequenceNumber ?? latestSeq, recentFiles[0].mimeType)}
                       </code>
                       <CopyButton
@@ -279,7 +279,7 @@ export default async function DashboardPage() {
         </section>
 
         {/* ─── 6. Recent Media + Activity (Tier 2) ─── */}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
           <Card tier="informational" className="animate-page-enter" style={{ "--enter-delay": "260ms" } as React.CSSProperties}>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -311,12 +311,12 @@ export default async function DashboardPage() {
               ) : (
                 <ul className="divide-y divide-border">
                   {recentFiles.map((f) => (
-                    <li key={f.id}>
+                    <li key={f.id} className="min-w-0">
                       <a
                         href={`/files?search=${encodeURIComponent(f.publicId)}`}
-                        className="flex items-center gap-3 py-2.5 rounded-lg transition-colors duration-[var(--duration-fast)] hover:bg-white/[0.03] px-2 -mx-2"
+                        className="dashboard-recent-media-link flex min-w-0 items-center gap-2 sm:gap-3 rounded-lg px-2 py-2.5 transition-colors duration-[var(--duration-fast)] hover:bg-accent -mx-2"
                       >
-                        <span className="size-11 rounded-lg overflow-hidden bg-muted/40 shrink-0 flex items-center justify-center border border-white/[0.06]">
+                        <span className="size-11 rounded-lg overflow-hidden bg-muted/40 shrink-0 flex items-center justify-center border border-border">
                           {isVideoMime(f.mimeType) ? (
                             <Film className="size-5 text-muted-foreground" aria-hidden />
                           ) : (
@@ -368,16 +368,16 @@ export default async function DashboardPage() {
                 ) : (
                   <ul className="space-y-1">
                     {recentLogs.map((l) => (
-                      <li key={l.id} className="flex items-center gap-2.5 text-sm py-1.5">
+                      <li key={l.id} className="dashboard-activity-row flex min-w-0 flex-wrap items-center gap-2.5 py-1.5 text-sm">
                         <AuditStatusBadge status={l.status} />
-                        <span className="font-mono text-xs px-1.5 py-0.5 rounded-lg bg-white/[0.04] border border-white/[0.06] shrink-0">
+                        <span className="font-mono text-xs px-1.5 py-0.5 rounded-lg bg-muted border border-border shrink-0">
                           {l.operation}
                         </span>
                         <span className="text-muted-foreground text-xs shrink-0 hidden sm:inline tabular-nums">
                           {formatDateTime(l.createdAt)}
                         </span>
                         {l.errorMessage && (
-                          <span className="text-xs text-muted-foreground truncate flex-1">— {l.errorMessage}</span>
+                          <span className="min-w-0 flex-1 break-words text-xs text-muted-foreground">— {l.errorMessage}</span>
                         )}
                       </li>
                     ))}

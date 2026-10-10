@@ -9,6 +9,7 @@ import { getServerSession } from "next-auth";
 import { randomUUID } from "node:crypto";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { telegramService, setTelegramUploadProgress, clearTelegramUploadProgress, setTelegramUploadDuplicate } from "@/services/telegram";
 import { sha256Buffer } from "@/lib/content-hash";
 import { reserveUploadHash, releaseUploadReservation } from "@/lib/upload-dedup";
@@ -17,7 +18,8 @@ import { cache } from "@/lib/cache";
 import { env, allowedMimeTypes, maxFileSizeBytes, maxRawSizeBytes, maxVideoSizeBytes, isVideoMime, isAudioMime, isRawMime, isAllowedDetectedMime, normalizeMimeType } from "@/lib/env";
 import { generatePublicId } from "@/lib/public-id";
 import { canonicalUrl, formatSequence } from "@/lib/media-url";
-import { rateLimit } from "@/services/rate-limit";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { logger } from "@/lib/logger";
 import { NextResponse } from "next/server";
 import { fileTypeFromBuffer } from "file-type";
@@ -100,7 +102,9 @@ export async function GET(req: Request) {
         ? [{ size: order }, { id: order }]
         : [{ createdAt: order }, { id: order }];
 
-  const where: Record<string, unknown> = {};
+  // Filter at the database layer so search, pagination totals, channel filters,
+  // sorting and all status views exclude soft-removed storage channels.
+  const where = withNonRemovedStorageChannel({});
   if (q.status !== "all") where.status = q.status;
   if (q.folderId !== "all") {
     const fid = Number(q.folderId);
@@ -217,18 +221,18 @@ export async function GET(req: Request) {
     page,
     limit,
     channels,
-  });
+  }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
+  const ip = getClientIp(req.headers);
   const adminEmail = (session.user as { email?: string }).email ?? "unknown";
 
   // Rate limit: 30 uploads/min/admin
-  if (!rateLimit(`upload:${ip}`, env.RATE_LIMIT_UPLOAD_PER_MIN, 60_000).ok) {
+  if (!(await rateLimitAsync(`upload:${ip}`, env.RATE_LIMIT_UPLOAD_PER_MIN, 60_000)).ok) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
 
@@ -261,8 +265,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "INVALID_FOLDER" }, { status: 400 });
   }
   if (folderId !== null) {
-    const folder = await db.folder.findUnique({ where: { id: folderId }, select: { id: true } });
-    if (!folder) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
+    const visibleFolderIds = await getVisibleFolderIds(db);
+    if (!visibleFolderIds.has(folderId)) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
   }
 
   // Validate channel exists and is active

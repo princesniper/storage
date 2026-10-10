@@ -21,11 +21,11 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "border border-dashed border-white/[0.08] rounded-xl p-10 md:p-14 text-center bg-white/[0.01]",
+        "border border-dashed border-border rounded-xl p-10 md:p-14 text-center bg-muted/30",
         className
       )}
     >
-      <div className="size-12 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center mx-auto mb-4">
+      <div className="size-12 rounded-xl bg-muted border border-border flex items-center justify-center mx-auto mb-4">
         <Icon className="size-5 text-muted-foreground" aria-hidden />
       </div>
       <p className="text-sm font-medium text-foreground">{title}</p>

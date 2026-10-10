@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { withNonRemovedStorageChannel } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
   const parsed = schema.safeParse(Object.fromEntries(url.searchParams));
   if (!parsed.success) return NextResponse.json({ error: "INVALID_QUERY" }, { status: 400 });
   const q = parsed.data;
-  const where: Record<string, unknown> = {};
+  const where = withNonRemovedStorageChannel({});
   if (q.status !== "all") where.status = q.status;
   if (q.channelId !== "all") {
     const channelId = Number(q.channelId);

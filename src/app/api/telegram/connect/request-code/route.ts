@@ -7,7 +7,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextResponse } from "next/server";
 import { telegramService } from "@/services/telegram";
-import { rateLimit } from "@/services/rate-limit";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { env } from "@/lib/env";
 import { audit } from "@/services/audit";
 import { logger } from "@/lib/logger";
@@ -19,8 +20,8 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
-  if (!rateLimit(`tg-code:${ip}`, 3, 60_000).ok) {
+  const ip = getClientIp(req.headers);
+  if (!(await rateLimitAsync(`tg-code:${ip}`, 3, 60_000)).ok) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
 

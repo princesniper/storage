@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return NextResponse.json({ error: "INVALID_BODY", detail: "Select between 1 and 100 folders." }, { status: 400 });
   const ids = [...new Set(parsed.data.ids)];
+  const visibleFolderIds = await getVisibleFolderIds(db);
   const all = await db.folder.findMany({ select: { id: true, parentId: true } });
   const byId = new Map(all.map(f => [f.id, f]));
   const selected = new Set(ids);
@@ -25,12 +27,15 @@ export async function POST(req: Request) {
   });
   const deleted: number[] = [];
   const failed: { id: number; error: string }[] = [];
-  for (const id of ids) if (!byId.has(id)) failed.push({ id, error: "NOT_FOUND" });
+  for (const id of ids) if (!byId.has(id) || !visibleFolderIds.has(id)) failed.push({ id, error: "NOT_FOUND" });
   for (const id of roots) {
+    if (!visibleFolderIds.has(id)) continue;
     try {
       const treeIds = new Set<number>([id]); let changed = true;
       while (changed) { changed = false; for (const folder of all) if (folder.parentId !== null && treeIds.has(folder.parentId) && !treeIds.has(folder.id)) { treeIds.add(folder.id); changed = true; } }
-      const files = await db.file.findMany({ where: { folderId: { in: [...treeIds] }, status: { not: "deleted" } }, select: { id: true } });
+      const removedChannelFile = await db.file.findFirst({ where: { folderId: { in: [...treeIds] }, storageChannel: { is: { status: "removed" } } }, select: { id: true } });
+      if (removedChannelFile) { failed.push({ id, error: "FOLDER_HAS_REMOVED_CHANNEL_DATA" }); continue; }
+      const files = await db.file.findMany({ where: withNonRemovedStorageChannel({ folderId: { in: [...treeIds] }, status: { not: "deleted" } }), select: { id: true } });
       await db.$transaction(async tx => {
         await tx.file.updateMany({ where: { id: { in: files.map(f => f.id) } }, data: { status: "deleted", deletedAt: new Date() } });
         await tx.folder.delete({ where: { id } });

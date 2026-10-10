@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -39,8 +40,10 @@ export async function POST(req: Request) {
 
   let rootName = normalizePart(body.rootName);
   if (body.parentFolderId !== undefined && body.parentFolderId !== null) {
-    const parent = await db.folder.findUnique({ where: { id: body.parentFolderId }, select: { id: true } });
-    if (!parent) return NextResponse.json({ error: "PARENT_FOLDER_NOT_FOUND" }, { status: 404 });
+    const visibleFolderIds = await getVisibleFolderIds(db);
+    if (!visibleFolderIds.has(body.parentFolderId)) {
+      return NextResponse.json({ error: "PARENT_FOLDER_NOT_FOUND" }, { status: 404 });
+    }
   }
   if (!rootName || rootName === "." || rootName === ".." || rootName.includes("/") || rootName.includes("\\") || rootName.includes("\0")) {
     return NextResponse.json({ error: "INVALID_ROOT_NAME" }, { status: 400 });

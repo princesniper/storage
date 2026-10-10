@@ -124,7 +124,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
   const storageConnected = storageStatus === "connected";
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground">
+    <div className="app-shell min-h-dvh flex bg-background text-foreground">
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
 
       <aside
@@ -136,13 +136,13 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
         aria-label="Primary navigation"
       >
         <div className={cn("flex items-center gap-2.5 px-4 py-4 mb-1", collapsed && "justify-center px-2")}>
-          <div className="size-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
-            <Leaf className="size-4 text-emerald-400" aria-hidden />
+          <div className="size-9 rounded-xl bg-primary/12 border border-primary/25 flex items-center justify-center shrink-0">
+            <Leaf className="size-4 text-primary" aria-hidden />
           </div>
           {!collapsed && (
             <div className="min-w-0">
               <div className="text-[13px] font-semibold tracking-[-0.01em] leading-tight text-foreground">
-                GrowPlants<span className="text-emerald-400"> Media</span>
+                GrowPlants<span className="text-primary"> Media</span>
               </div>
               <div className="text-[10px] text-muted-foreground leading-tight tracking-[0.04em] uppercase font-medium mt-0.5">
                 Media Storage
@@ -171,13 +171,13 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                         "relative flex items-center gap-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                         collapsed ? "justify-center px-0 py-2.5" : "px-3 py-2",
                         active
-                          ? "bg-emerald-500/10 text-emerald-400"
+                          ? "bg-primary/12 text-primary"
                           : "text-muted-foreground hover:bg-accent hover:text-foreground active:scale-[0.98]"
                       )}
                     >
                       {active && (
                         <span
-                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-emerald-400 transition-all duration-200"
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full bg-primary transition-all duration-200"
                           aria-hidden
                         />
                       )}
@@ -210,12 +210,12 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0 transition-colors",
-                storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
+                storageConnected ? "bg-status-completed" : "bg-status-exception"
               )} aria-hidden />
               <span className="text-xs font-medium text-muted-foreground flex-1 truncate">Storage</span>
               <span className={cn(
                 "text-[10px] font-medium tracking-wide",
-                storageConnected ? "text-emerald-400" : "text-red-400"
+                storageConnected ? "text-status-completed" : "text-status-exception"
               )}>
                 {storageConnected ? "Connected" : storageStatus === "unknown" ? "Checking…" : "Offline"}
               </span>
@@ -225,11 +225,11 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
               <TooltipTrigger asChild>
                 <div className={cn(
                   "size-9 rounded-lg flex items-center justify-center cursor-default border",
-                  storageConnected ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"
+                  storageConnected ? "bg-status-completed/10 border-status-completed/25" : "bg-status-exception/10 border-status-exception/25"
                 )}>
                   {storageConnected
-                    ? <Wifi className="size-3.5 text-emerald-400" aria-hidden />
-                    : <WifiOff className="size-3.5 text-red-400" aria-hidden />
+                    ? <Wifi className="size-3.5 text-status-completed" aria-hidden />
+                    : <WifiOff className="size-3.5 text-status-exception" aria-hidden />
                   }
                 </div>
               </TooltipTrigger>
@@ -242,7 +242,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
           {!collapsed && (
             <div className="flex items-center gap-2.5 px-2 py-1.5">
               <div
-                className="size-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-semibold shrink-0 text-emerald-400"
+                className="size-8 rounded-full bg-primary/12 border border-primary/25 flex items-center justify-center text-xs font-semibold shrink-0 text-primary"
                 aria-hidden
               >
                 {adminInitial}
@@ -275,7 +275,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-2 px-4 py-2.5 border-b border-border bg-background/85 backdrop-blur-md">
+        <header className="app-topbar sticky top-0 z-30 flex items-center justify-between gap-2 px-4 py-3 border-b border-border bg-background/85 backdrop-blur-md">
           <div className="flex items-center gap-2 min-w-0">
             <Button
               size="icon"
@@ -288,8 +288,8 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
               <Menu className="size-4" aria-hidden />
             </Button>
             <div className="flex items-center gap-2 md:hidden">
-              <div className="size-7 rounded-md bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                <Leaf className="size-3.5 text-emerald-400" aria-hidden />
+              <div className="size-7 rounded-md bg-primary/12 border border-primary/25 flex items-center justify-center">
+                <Leaf className="size-3.5 text-primary" aria-hidden />
               </div>
               <span className="font-semibold text-sm">GrowPlants</span>
             </div>
@@ -308,7 +308,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-9 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-500" aria-label="Open account menu">
+                <Button variant="ghost" size="icon" className="size-9 rounded-full border border-primary/25 bg-primary/12 text-primary" aria-label="Open account menu">
                   <span className="text-xs font-semibold" aria-hidden>{adminInitial}</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -327,8 +327,8 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
           </div>
         </header>
 
-        <main className="flex-1 p-4 md:p-8 w-full">
-          <div key={pathname} className="animate-page-enter max-w-7xl mx-auto w-full">{children}</div>
+        <main className="app-main flex-1 p-4 md:p-7 xl:p-8 w-full">
+          <div key={pathname} className="app-page-content animate-page-enter max-w-[88rem] mx-auto w-full">{children}</div>
         </main>
       </div>
 
@@ -336,11 +336,11 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
         <SheetContent side="left" className="w-72 p-0 flex flex-col bg-sidebar">
           <SheetHeader className="px-4 py-4 border-b border-border text-left">
             <div className="flex items-center gap-2.5">
-              <div className="size-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
-                <Leaf className="size-4 text-emerald-400" aria-hidden />
+              <div className="size-9 rounded-xl bg-primary/12 border border-primary/25 flex items-center justify-center">
+                <Leaf className="size-4 text-primary" aria-hidden />
               </div>
               <div>
-                <SheetTitle className="text-sm">GrowPlants<span className="text-emerald-400"> Media</span></SheetTitle>
+                <SheetTitle className="text-sm">GrowPlants<span className="text-primary"> Media</span></SheetTitle>
                 <div className="text-[10px] text-muted-foreground tracking-[0.04em] uppercase font-medium mt-0.5">Media Storage</div>
               </div>
             </div>
@@ -361,7 +361,7 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
                         className={cn(
                           "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors min-h-11",
                           active
-                            ? "bg-emerald-500/10 text-emerald-400"
+                            ? "bg-primary/12 text-primary"
                             : "text-muted-foreground hover:bg-accent hover:text-foreground"
                         )}
                       >
@@ -378,15 +378,15 @@ export function DashboardShell({ children, sidebarExtra }: { children: React.Rea
             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40 border border-border">
               <span className={cn(
                 "size-2 rounded-full shrink-0",
-                storageConnected ? "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" : "bg-red-400"
+                storageConnected ? "bg-status-completed" : "bg-status-exception"
               )} aria-hidden />
               <span className="text-xs text-muted-foreground flex-1">Storage</span>
-              <span className={cn("text-[10px] font-medium", storageConnected ? "text-emerald-400" : "text-red-400")}>
+              <span className={cn("text-[10px] font-medium", storageConnected ? "text-status-completed" : "text-status-exception")}>
                 {storageConnected ? "Connected" : "Offline"}
               </span>
             </div>
             <div className="flex items-center gap-2.5 px-2 py-1.5">
-              <div className="size-8 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-xs font-semibold text-emerald-400" aria-hidden>
+              <div className="size-8 rounded-full bg-primary/12 border border-primary/25 flex items-center justify-center text-xs font-semibold text-primary" aria-hidden>
                 {adminInitial}
               </div>
               <div className="min-w-0 flex-1">

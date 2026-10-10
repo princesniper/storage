@@ -1,4 +1,10 @@
 import { PrismaClient } from '@prisma/client'
+import { assertSafeDatabaseTarget } from './database-safety'
+
+// Fail closed before constructing Prisma. Local development must never
+// connect to Railway/production, because channel/file/folder mutations would
+// otherwise be visible to the deployed app as well.
+assertSafeDatabaseTarget(process.env.DATABASE_URL)
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined

@@ -5,7 +5,8 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { rateLimit } from "@/services/rate-limit";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -38,10 +39,10 @@ export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
 
-  const ip = req.headers.get("x-forwarded-for") ?? "unknown";
+  const ip = getClientIp(req.headers);
 
   // Rate limit: 60/min/admin
-  if (!rateLimit(`audit:${ip}`, 60, 60_000).ok) {
+  if (!(await rateLimitAsync(`audit:${ip}`, 60, 60_000)).ok) {
     return NextResponse.json({ error: "RATE_LIMITED" }, { status: 429 });
   }
 

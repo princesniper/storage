@@ -5,6 +5,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { telegramService } from "@/services/telegram";
 import { audit } from "@/services/audit";
 import { cache } from "@/lib/cache";
@@ -18,14 +19,14 @@ async function findFile(id: string) {
   // Try numeric id first, then publicId
   const numeric = Number(id);
   if (Number.isInteger(numeric) && numeric > 0) {
-    const f = await db.file.findUnique({
-      where: { id: numeric },
+    const f = await db.file.findFirst({
+      where: withNonRemovedStorageChannel({ id: numeric }),
       include: { storageChannel: { select: { id: true, name: true, telegramChannelId: true } } },
     });
     if (f) return f;
   }
   return db.file.findFirst({
-    where: { publicId: id },
+    where: withNonRemovedStorageChannel({ publicId: id }),
     include: { storageChannel: { select: { id: true, name: true, telegramChannelId: true } } },
   });
 }
@@ -180,8 +181,8 @@ export async function PATCH(req: Request, ctx: RouteContext) {
   }
 
   if (folderId !== null) {
-    const folder = await db.folder.findUnique({ where: { id: folderId }, select: { id: true } });
-    if (!folder) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
+    const visibleFolderIds = await getVisibleFolderIds(db);
+    if (!visibleFolderIds.has(folderId)) return NextResponse.json({ error: "FOLDER_NOT_FOUND" }, { status: 404 });
   }
 
   const updated = await db.file.update({

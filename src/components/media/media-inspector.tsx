@@ -26,7 +26,7 @@ interface MediaInspectorProps {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-0.5 py-2.5 border-b border-white/[0.05]">
+    <div className="flex flex-col gap-0.5 py-2.5 border-b border-border">
       <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/60">
         {label}
       </span>
@@ -71,7 +71,7 @@ export function MediaInspector({ file, onClose, onDeleted }: MediaInspectorProps
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08] shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold text-foreground">File Inspector</h2>
         {onClose && (
           <Button variant="ghost" size="icon" className="size-7 text-muted-foreground hover:text-foreground" onClick={onClose} aria-label="Close inspector">
@@ -83,12 +83,12 @@ export function MediaInspector({ file, onClose, onDeleted }: MediaInspectorProps
       {/* Fields */}
       <div className="flex-1 overflow-y-auto px-4">
         <Row label="Sequence">
-          <span className="font-mono text-lg font-semibold text-emerald-400">{seq}</span>
+          <span className="font-mono text-lg font-semibold text-primary">{seq}</span>
         </Row>
 
         <Row label="Canonical URL">
           <div className="flex flex-col gap-2">
-            <code className="text-[11px] font-mono text-muted-foreground break-all leading-relaxed bg-white/[0.04] border border-white/[0.06] rounded-lg px-2.5 py-2">
+            <code className="text-[11px] font-mono text-muted-foreground break-all leading-relaxed bg-muted border border-border rounded-lg px-2.5 py-2">
               {canonicalUrl}
             </code>
             <Button
@@ -136,7 +136,7 @@ export function MediaInspector({ file, onClose, onDeleted }: MediaInspectorProps
       </div>
 
       {/* Actions */}
-      <div className="shrink-0 p-4 border-t border-white/[0.06] space-y-2">
+      <div className="shrink-0 p-4 border-t border-border space-y-2">
         <Button variant="outline" size="sm" className="w-full" asChild>
           <a href={canonicalUrl} target="_blank" rel="noreferrer">
             <ExternalLink className="size-3.5 mr-1.5" aria-hidden />

@@ -13,6 +13,9 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { createHash } from "node:crypto";
+import { rateLimitAsync } from "@/services/rate-limit";
+import { getClientIp } from "@/lib/client-ip";
 
 async function ensureAdminSeed() {
   const admin = await db.admin.findFirst();
@@ -52,11 +55,28 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(creds) {
-        if (!creds?.email || !creds?.password) return null;
+      async authorize(creds, req) {
+        const ip = getClientIp(new Headers(req.headers as HeadersInit));
+        const email = typeof creds?.email === "string" ? creds.email.trim().toLowerCase() : "";
+        const ipLimit = await rateLimitAsync(
+          "login:ip:" + ip,
+          env.RATE_LIMIT_LOGIN_PER_15MIN,
+          15 * 60_000,
+        );
+        const accountKey = createHash("sha256").update(email || "<missing>").digest("hex");
+        const accountLimit = await rateLimitAsync(
+          "login:account:" + accountKey,
+          env.RATE_LIMIT_LOGIN_PER_15MIN,
+          15 * 60_000,
+        );
+        if (!ipLimit.ok || !accountLimit.ok) {
+          logger.warn("Login rate limit exceeded", { ip, accountKey: accountKey.slice(0, 12) });
+          return null;
+        }
+        if (!email || typeof creds?.password !== "string" || !creds.password) return null;
         await ensureAdminSeed();
         const admin = await db.admin.findFirst({
-          where: { email: creds.email.toLowerCase() },
+          where: { email },
         });
         if (!admin) return null;
         const ok = bcrypt.compareSync(creds.password, admin.passwordHash);

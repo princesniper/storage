@@ -28,15 +28,13 @@ COPY . .
 RUN npx prisma generate
 # Standalone output + static/public are assembled by the build script
 # (next build && cp .next/static + public into .next/standalone).
-ARG DATABASE_URL
-ARG AUTH_SECRET
-ARG ADMIN_EMAIL
-ARG ADMIN_PASSWORD
-
-ENV DATABASE_URL=$DATABASE_URL \
-    AUTH_SECRET=$AUTH_SECRET \
-    ADMIN_EMAIL=$ADMIN_EMAIL \
-    ADMIN_PASSWORD=$ADMIN_PASSWORD
+# Build-time placeholders only. Real credentials are supplied by the hosting
+# platform at runtime; never pass production secrets as Docker build arguments.
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public" \
+    AUTH_SECRET="build-only-placeholder-secret-not-for-runtime-000000000000" \
+    ADMIN_EMAIL="build-placeholder@example.invalid" \
+    ADMIN_PASSWORD="build-only-placeholder-password" \
+    MEDIA_PUBLIC_URL="https://growplants-media.up.railway.app"
 
 RUN npm run build
 

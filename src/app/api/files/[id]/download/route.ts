@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { withNonRemovedStorageChannel } from "@/lib/active-library";
 import { findSharedFile, getSharedFileBytes } from "@/lib/shared-media";
 import { NextResponse } from "next/server";
 
@@ -16,8 +17,8 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: "INVALID_FILE_ID" }, { status: 400 });
   }
 
-  const file = await db.file.findUnique({
-    where: { id: fileId },
+  const file = await db.file.findFirst({
+    where: withNonRemovedStorageChannel({ id: fileId, status: "active" }),
     select: { id: true, folderId: true, originalName: true, mimeType: true, status: true },
   });
   if (!file || file.status !== "active" || file.folderId === null) {

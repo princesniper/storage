@@ -6,6 +6,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { invalidateAnalyticsCache } from "@/lib/analytics-cache";
 import { audit } from "@/services/audit";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -17,7 +18,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   const { id } = await ctx.params;
   const ch = await db.storageChannel.findUnique({ where: { id: Number(id) } });
-  if (!ch) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (!ch || ch.status === "removed") return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   return NextResponse.json({ channel: ch });
 }
 
@@ -42,6 +43,9 @@ export async function PATCH(req: Request, ctx: RouteContext) {
 
   const existing = await db.storageChannel.findUnique({ where: { id: Number(id) } });
   if (!existing) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (existing.status === "removed") {
+    return NextResponse.json({ error: "CHANNEL_REMOVED", detail: "Reconnect this channel through the authorized add-channel flow." }, { status: 409 });
+  }
 
   const updated = await db.storageChannel.update({
     where: { id: existing.id },
@@ -51,6 +55,8 @@ export async function PATCH(req: Request, ctx: RouteContext) {
       ...(parsed.status !== undefined ? { status: parsed.status } : {}),
     },
   });
+
+  invalidateAnalyticsCache();
 
   await audit({
     operation: "CHANNEL_UPDATE",
@@ -70,20 +76,26 @@ export async function DELETE(req: Request, ctx: RouteContext) {
 
   const existing = await db.storageChannel.findUnique({ where: { id: Number(id) } });
   if (!existing) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (existing.status === "removed") {
+    invalidateAnalyticsCache();
+    return NextResponse.json({ success: true, preserved: true, reconnectable: true, alreadyRemoved: true }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
+  }
 
   // IMPORTANT: never hard-delete a storage channel.
-  // File rows reference this channel, and folders reference those files.
-  // Deleting the channel with Prisma's CASCADE relation would permanently
-  // delete the entire file index. Marking it inactive preserves every File,
-  // Folder relationship, sequence number, checksum, preview and public URL.
+  // Keep the original row and mark the registration as removed so it disappears
+  // from the dashboard while a later POST can reactivate the same channel row.
+  // File IDs, Telegram message mappings, folder hierarchy, sequences, previews,
+  // and canonical public URLs remain untouched.
   const updated = await db.storageChannel.update({
     where: { id: existing.id },
     data: {
-      status: "inactive",
+      status: "removed",
       lastTestOk: false,
       lastTestError: "Storage channel disconnected",
     },
   });
+
+  invalidateAnalyticsCache();
 
   await audit({
     operation: "CHANNEL_DELETE",
@@ -93,7 +105,7 @@ export async function DELETE(req: Request, ctx: RouteContext) {
       channelId: updated.id,
       name: updated.name,
       telegramChannelId: updated.telegramChannelId,
-      action: "SOFT_DELETE",
+      action: "SOFT_REMOVE",
       dataPreserved: true,
     },
   });
@@ -102,5 +114,6 @@ export async function DELETE(req: Request, ctx: RouteContext) {
     success: true,
     preserved: true,
     reconnectable: true,
-  });
+    channelId: updated.id,
+  }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }

@@ -83,7 +83,7 @@ function useChartAnimation(): boolean {
 
 function LoadingPair() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
       {Array.from({ length: 2 }).map((_, i) => (
         <Card key={i} tier="informational">
           <CardContent className="p-6">
@@ -113,12 +113,12 @@ export function StorageOverview() {
   if (isError || !data) return <PanelsError />;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <Card tier="informational" className="animate-page-enter" style={{ "--enter-delay": "120ms" } as React.CSSProperties}>
+    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+      <Card tier="informational" className="min-w-0 animate-page-enter" style={{ "--enter-delay": "120ms" } as React.CSSProperties}>
         <CardHeader>
           <CardTitle className="text-base">Storage by Channel</CardTitle>
         </CardHeader>
-        <CardContent className="h-72 text-muted-foreground">
+        <CardContent className="dashboard-chart-content h-72 min-w-0 text-muted-foreground">
           {data.channelBreakdown.length === 0 ? (
             <EmptyMsg />
           ) : (
@@ -128,11 +128,11 @@ export function StorageOverview() {
                 <YAxis
                   type="category"
                   dataKey="channelName"
-                  width={110}
+                  width={84}
                   tick={{ fill: "currentColor", fontSize: 12 }}
                 />
                 <Tooltip contentStyle={{ ...TOOLTIP_STYLE }} />
-                <Legend />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar dataKey="active" stackId="s" fill={C_ACTIVE} name="Active" isAnimationActive={animate} />
                 <Bar dataKey="missing" stackId="s" fill={C_MISSING} name="Missing" isAnimationActive={animate} />
                 <Bar dataKey="deleted" stackId="s" fill={C_DELETED} name="Deleted" isAnimationActive={animate} />
@@ -142,42 +142,60 @@ export function StorageOverview() {
         </CardContent>
       </Card>
 
-      <Card tier="informational" className="animate-page-enter" style={{ "--enter-delay": "160ms" } as React.CSSProperties}>
+      <Card tier="informational" className="min-w-0 animate-page-enter" style={{ "--enter-delay": "160ms" } as React.CSSProperties}>
         <CardHeader>
           <CardTitle className="text-base">Media Type Mix</CardTitle>
         </CardHeader>
-        <CardContent className="h-72 text-muted-foreground">
+        <CardContent className="dashboard-pie-content min-w-0 text-muted-foreground">
           {data.mimeDistribution.length === 0 ? (
             <EmptyMsg />
           ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data.mimeDistribution}
-                  dataKey="count"
-                  nameKey="mime"
-                  innerRadius="55%"
-                  outerRadius="85%"
-                  paddingAngle={2}
-                  isAnimationActive={animate}
-                  label={({ mime, pct }: { mime?: string; pct?: number }) => `${shortMime(String(mime))} ${pct}%`}
-                  labelLine={false}
-                >
-                  {data.mimeDistribution.map((entry, i) => (
-                    <Cell key={entry.mime} fill={MIME_COLORS[i % MIME_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ ...TOOLTIP_STYLE }}
-                  formatter={(value, name, item) => {
-                    const pct =
-                      (item as unknown as { payload?: { pct?: number } })?.payload?.pct ?? 0;
-                    return [`${value} files (${pct}%)`, name];
-                  }}
-                />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            <>
+              <div className="dashboard-pie-chart h-52 min-w-0 sm:h-60">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data.mimeDistribution}
+                      dataKey="count"
+                      nameKey="mime"
+                      innerRadius="55%"
+                      outerRadius="82%"
+                      paddingAngle={2}
+                      isAnimationActive={animate}
+                      label={false}
+                      labelLine={false}
+                    >
+                      {data.mimeDistribution.map((entry, i) => (
+                        <Cell key={entry.mime} fill={MIME_COLORS[i % MIME_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ ...TOOLTIP_STYLE }}
+                      formatter={(value, name, item) => {
+                        const pct =
+                          (item as unknown as { payload?: { pct?: number } })?.payload?.pct ?? 0;
+                        return [`${value} files (${pct}%)`, name];
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="dashboard-pie-legend mt-3 grid min-w-0 grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+                {data.mimeDistribution.map((entry, i) => (
+                  <div key={entry.mime} className="flex min-w-0 items-start gap-2 text-xs">
+                    <span
+                      className="mt-1.5 size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: MIME_COLORS[i % MIME_COLORS.length] }}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 break-words leading-4">{entry.mime}</span>
+                    <span className="shrink-0 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
+                      {entry.pct}% · {entry.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -198,11 +216,11 @@ export function UploadActivity() {
   if (isError || !data) return <PanelsError />;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <Card tier="informational" className="animate-page-enter" style={{ "--enter-delay": "200ms" } as React.CSSProperties}>
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
-          <CardTitle className="text-base">Upload Activity — Last {range} Days</CardTitle>
-          <div className="flex rounded-lg border border-border p-0.5 gap-0.5 shrink-0" role="group" aria-label="Activity time range">
+    <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+      <Card tier="informational" className="min-w-0 animate-page-enter" style={{ "--enter-delay": "200ms" } as React.CSSProperties}>
+        <CardHeader className="flex flex-col items-start gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="min-w-0 text-base leading-snug">Upload Activity — Last {range} Days</CardTitle>
+          <div className="flex shrink-0 gap-0.5 rounded-lg border border-border p-0.5" role="group" aria-label="Activity time range">
             {ACTIVITY_RANGES.map((d) => (
               <button
                 key={d}
@@ -210,8 +228,8 @@ export function UploadActivity() {
                 aria-pressed={range === d}
                 className={
                   range === d
-                    ? "px-2.5 h-7 rounded-md text-xs font-medium bg-secondary text-secondary-foreground"
-                    : "px-2.5 h-7 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-white/[0.04] duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,color]"
+                    ? "h-11 min-w-11 rounded-md px-3 text-xs font-medium bg-secondary text-secondary-foreground sm:h-7 sm:min-w-0 sm:px-2.5"
+                    : "h-11 min-w-11 rounded-md px-3 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,color] sm:h-7 sm:min-w-0 sm:px-2.5"
                 }
               >
                 {d}D
@@ -219,7 +237,7 @@ export function UploadActivity() {
             ))}
           </div>
         </CardHeader>
-        <CardContent className="h-72 text-muted-foreground">
+        <CardContent className="dashboard-chart-content h-72 min-w-0 text-muted-foreground">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data.uploadActivity} margin={{ left: -16, right: 16 }}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -231,7 +249,7 @@ export function UploadActivity() {
               />
               <YAxis allowDecimals={false} tick={{ fill: "currentColor", fontSize: 12 }} />
               <Tooltip contentStyle={{ ...TOOLTIP_STYLE }} />
-              <Legend />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="success" stroke={C_SUCCESS} strokeWidth={2} dot={false} name="Success" isAnimationActive={animate} />
               <Line type="monotone" dataKey="failed" stroke={C_FAILED} strokeWidth={2} dot={false} name="Failed" isAnimationActive={animate} />
             </LineChart>

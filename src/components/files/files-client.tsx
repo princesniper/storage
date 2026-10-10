@@ -295,13 +295,13 @@ export default function FilesClient() {
   };
 
   return (
-    <div className="space-y-5 pb-24">
+    <div className="page-workspace space-y-5 pb-24">
       <PageHeader
         title={
           <span className="flex items-center gap-2.5">
             Media Library
             {data?.total !== undefined && (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 tabular-nums">
+              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/12 border border-primary/25 text-primary tabular-nums">
                 {data.total.toLocaleString()} files
               </span>
             )}
@@ -356,7 +356,7 @@ export default function FilesClient() {
       />
 
       {/* ─── Filters ─── */}
-      <div className="flex flex-col gap-3">
+      <div className="clay-toolbar flex flex-col gap-3 p-3 md:p-4">
         {/* Search + dropdowns */}
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
@@ -370,7 +370,7 @@ export default function FilesClient() {
                 resetPage();
                 syncUrl({ search: e.target.value, page: "1" });
               }}
-              className="pl-9 bg-white/[0.03] border-white/[0.08] focus:border-emerald-500/40"
+              className="pl-9 focus:border-ring"
               aria-label="Search files"
             />
           </div>
@@ -445,6 +445,8 @@ export default function FilesClient() {
           ].map((opt) => (
             <button
               key={opt.value}
+              type="button"
+              aria-pressed={mimeType === opt.value}
               onClick={() => {
                 setSelected(new Set());
                 setMimeType(opt.value);
@@ -454,8 +456,8 @@ export default function FilesClient() {
               className={cn(
                 "px-3 py-1 rounded-full text-xs font-medium border transition-all duration-150",
                 mimeType === opt.value
-                  ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                  : "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:bg-white/[0.07] hover:text-foreground"
+                  ? "bg-primary/12 border-primary/30 text-primary"
+                  : "bg-muted border-border text-muted-foreground hover:bg-accent hover:text-foreground"
               )}
             >
               {opt.label}
@@ -465,12 +467,12 @@ export default function FilesClient() {
             <Input
               type="number" min={0} placeholder="Min KB" value={minSizeKb}
               onChange={(e) => { setSelected(new Set()); setMinSizeKb(e.target.value); resetPage(); syncUrl({ minSize: e.target.value, page: "1" }); }}
-              className="w-24 h-9 md:h-7 text-xs bg-white/[0.03] border-white/[0.08]" aria-label="Minimum size in KB"
+              className="w-24 h-9 md:h-7 text-xs" aria-label="Minimum size in KB"
             />
             <Input
               type="number" min={0} placeholder="Max KB" value={maxSizeKb}
               onChange={(e) => { setSelected(new Set()); setMaxSizeKb(e.target.value); resetPage(); syncUrl({ maxSize: e.target.value, page: "1" }); }}
-              className="w-24 h-9 md:h-7 text-xs bg-white/[0.03] border-white/[0.08]" aria-label="Maximum size in KB"
+              className="w-24 h-9 md:h-7 text-xs" aria-label="Maximum size in KB"
             />
             <DatePicker label="From" value={from} onChange={(v) => { setSelected(new Set()); setFrom(v); resetPage(); syncUrl({ from: v, page: "1" }); }} />
             <DatePicker label="To" value={to} onChange={(v) => { setSelected(new Set()); setTo(v); resetPage(); syncUrl({ to: v, page: "1" }); }} />
@@ -523,7 +525,7 @@ export default function FilesClient() {
           onDelete={(f) => confirmSingleDelete(f as unknown as FileRow)}
         />
       ) : (
-        <div className="rounded-xl border border-white/[0.07] overflow-hidden bg-[#111113]">
+        <div className="rounded-xl border border-border overflow-hidden bg-card">
           <ul className="divide-y divide-white/[0.05]">
             {files.map((f, i) => (
               <FileListRow
@@ -564,14 +566,14 @@ export default function FilesClient() {
 
       {/* ─── Floating batch action bar ─── */}
       {selected.size > 0 && (
-        <div className="fixed bottom-3 left-2 right-2 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 flex flex-wrap items-center justify-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full shadow-2xl shadow-black/60 px-3 sm:px-5 py-3 animate-page-enter border border-white/[0.12] glass-panel max-w-[calc(100vw-1rem)]">
-          <span className="size-6 rounded-full bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-[11px] font-bold text-emerald-400 shrink-0">
+        <div className="fixed bottom-3 left-2 right-2 sm:bottom-6 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 flex flex-wrap items-center justify-center gap-2 sm:gap-3 rounded-2xl sm:rounded-full shadow-2xl shadow-black/60 px-3 sm:px-5 py-3 animate-page-enter border border-border glass-panel max-w-[calc(100vw-1rem)]">
+          <span className="size-6 rounded-full bg-primary/12 border border-primary/25 flex items-center justify-center text-[11px] font-bold text-primary shrink-0">
             {selected.size}
           </span>
           <span className="text-sm font-medium whitespace-nowrap text-foreground">
             {selected.size} selected
           </span>
-          <div className="w-px h-4 bg-white/[0.08]" aria-hidden />
+          <div className="w-px h-4 bg-border" aria-hidden />
           <BulkFileActions selectedIds={Array.from(selected)} onSelectionChange={(ids) => setSelected(new Set(ids))} />
           <Button
             size="sm"
@@ -811,7 +813,7 @@ function FileListRow({ file, selected, onToggleSelect, onOpen, onDelete }: Omit<
   return (
     <li
       className={cn(
-        "flex items-center gap-3 px-3 py-2.5 cursor-pointer duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color] hover:bg-white/[0.03]",
+        "flex items-center gap-3 px-3 py-2.5 cursor-pointer duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color] hover:bg-accent",
         "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-[-2px]",
         selected && "bg-primary/5"
       )}

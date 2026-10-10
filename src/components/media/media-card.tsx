@@ -61,9 +61,9 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
   return (
     <div
       className={cn(
-        "group relative rounded-xl border overflow-hidden cursor-pointer card-interactive animate-page-enter bg-[#111113]",
+        "clay-media-card group relative rounded-xl border overflow-hidden cursor-pointer card-interactive animate-page-enter bg-card",
         "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
-        selected ? "ring-2 ring-emerald-500 border-emerald-500/40" : "border-white/[0.07] hover:border-white/[0.14]"
+        selected ? "ring-2 ring-primary border-primary/40" : "border-border hover:border-primary/30"
       )}
       style={{ "--enter-delay": `${Math.min(index, 15) * 20}ms` } as React.CSSProperties}
       role="button"
@@ -75,7 +75,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
       }}
     >
       {/* ─── Media canvas (no zoom-on-hover: ops grid stays calm) ─── */}
-      <div className="aspect-square bg-[#0d0d0f] relative overflow-hidden">
+      <div className="media-card__canvas aspect-square bg-muted relative overflow-hidden">
         {/* Thumbnail / image */}
         <span className="block size-full">
           {isVideo ? (
@@ -136,7 +136,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
             <span
               className={cn(
                 "size-5 rounded-lg border flex items-center justify-center duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,border-color]",
-                selected ? "bg-emerald-500 border-emerald-500" : "bg-black/50 border-white/20 backdrop-blur"
+                selected ? "bg-primary border-primary" : "bg-black/50 border-white/30 backdrop-blur"
               )}
               aria-label={`${selected ? "Deselect" : "Select"} ${file.originalName}`}
               role="checkbox"
@@ -145,7 +145,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
               aria-checked={selected}
               onKeyDown={(e) => { e.stopPropagation(); if (file.status === "active" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onSelect(); } }}
             >
-              {selected && <Check className="size-3 text-white" aria-hidden />}
+              {selected && <Check className="size-3 text-primary-foreground" aria-hidden />}
             </span>
           </span>
         )}
@@ -189,7 +189,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
       </div>
 
       {/* ─── Metadata footer ─── */}
-      <div className="px-2.5 py-2 space-y-0.5">
+      <div className="media-card__metadata px-3 py-2.5 space-y-1">
         <div className="text-[11px] font-medium truncate text-foreground/90" title={file.originalName}>
           {file.originalName}
         </div>

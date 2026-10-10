@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -15,15 +16,16 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "INVALID_BODY", detail: parsed.error.issues.map((i) => i.message).join("; ") }, { status: 400 });
   const ids = [...new Set(parsed.data.ids)];
   const destinationId = parsed.data.folderId;
-  if (destinationId !== null && !await db.folder.findUnique({ where: { id: destinationId }, select: { id: true } })) {
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (destinationId !== null && !visibleFolderIds.has(destinationId)) {
     return NextResponse.json({ error: "INVALID_DESTINATION" }, { status: 400 });
   }
-  const files = await db.file.findMany({ where: { id: { in: ids } }, select: { id: true, originalName: true, status: true, folderId: true } });
+  const files = await db.file.findMany({ where: withNonRemovedStorageChannel({ id: { in: ids } }), select: { id: true, originalName: true, status: true, folderId: true } });
   const byId = new Map(files.map((f) => [f.id, f]));
   const moved: number[] = [];
   const failed: { id: number; error: string }[] = [];
   const destinationNames = new Set((await db.file.findMany({
-    where: { folderId: destinationId, status: { not: "deleted" }, id: { notIn: ids } },
+    where: withNonRemovedStorageChannel({ folderId: destinationId, status: { not: "deleted" }, id: { notIn: ids } }),
     select: { originalName: true },
   })).map((f) => f.originalName.toLocaleLowerCase()));
   for (const id of ids) {

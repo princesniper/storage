@@ -9,21 +9,21 @@ interface HealthItem {
 }
 
 const STATUS_STYLES: Record<HealthItem["status"], string> = {
-  ok: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+  ok: "bg-status-completed/10 border-status-completed/25 text-status-completed",
   warning: "bg-amber-500/10 border-amber-500/20 text-amber-400",
   error: "bg-red-500/10 border-red-500/20 text-red-400",
-  unknown: "bg-white/[0.04] border-white/[0.08] text-muted-foreground",
+  unknown: "bg-muted border-border text-muted-foreground",
 };
 
 const DOT_STYLES: Record<HealthItem["status"], string> = {
-  ok: "bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]",
+  ok: "bg-status-completed",
   warning: "bg-amber-400",
   error: "bg-red-400",
   unknown: "bg-muted-foreground/40",
 };
 
 const LABEL_STYLES: Record<HealthItem["status"], string> = {
-  ok: "text-emerald-400",
+  ok: "text-status-completed",
   warning: "text-amber-400",
   error: "text-red-400",
   unknown: "text-muted-foreground",

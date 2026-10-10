@@ -48,7 +48,7 @@ export function MoveFile({ fileId, currentFolderId }: { fileId: number; currentF
   return (
     <div className="rounded-lg border border-border/60 p-3 space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <FolderOpen className="size-4 text-emerald-400" /> Folder
+        <FolderOpen className="size-4 text-primary" /> Folder
       </div>
       <div className="flex gap-2">
         <Select value={folderId} onValueChange={setFolderId}>

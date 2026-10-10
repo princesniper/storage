@@ -97,9 +97,15 @@ export default function ChannelsClient() {
         throw new Error(err.error ?? "Delete failed");
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast({ title: "Channel registration removed", description: "Stored content was not touched." });
-      qc.invalidateQueries({ queryKey: ["destinations"] });
+      // Removal changes the server-side active library, not just the channel card.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["destinations"] }),
+        qc.invalidateQueries({ queryKey: ["files"] }),
+        qc.invalidateQueries({ queryKey: ["folders"] }),
+        qc.invalidateQueries({ queryKey: ["folder"] }),
+      ]);
     },
     onError: (e: Error) => toast({ title: "Couldn't remove destination", description: e.message, variant: "destructive" }),
   });
@@ -107,7 +113,7 @@ export default function ChannelsClient() {
   const storageConnected = data?.storageStatus === "connected";
 
   return (
-    <div className="space-y-6">
+    <div className="page-workspace space-y-6">
       <PageHeader
         title="Storage Destinations"
         description="Configured storage destinations used by the application."
@@ -210,8 +216,8 @@ function ChannelCard({
             <span className={cn(
               "size-10 rounded-xl flex items-center justify-center shrink-0 transition-colors border",
               active
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                : "bg-white/[0.03] border-white/[0.06] text-muted-foreground"
+                ? "bg-status-completed/10 border-status-completed/25 text-status-completed"
+                : "bg-muted border-border text-muted-foreground"
             )}>
               <FolderTree className="size-4" aria-hidden />
             </span>
@@ -238,7 +244,7 @@ function ChannelCard({
           <div className="flex items-center justify-between gap-2">
             <dt className="text-muted-foreground shrink-0">Storage ID</dt>
             <dd className="flex items-center gap-1.5 min-w-0">
-              <code className="font-mono bg-white/[0.04] border border-white/[0.06] px-1.5 py-0.5 rounded text-[11px] truncate max-w-[140px]">
+              <code className="font-mono bg-muted border border-border px-1.5 py-0.5 rounded text-[11px] truncate max-w-[140px]">
                 {c.destinationId}
               </code>
               <CopyButton text={c.destinationId} iconOnly label="Copy destination ID" size="icon" className="size-6 shrink-0" />
@@ -261,8 +267,8 @@ function ChannelCard({
                 <span className="text-muted-foreground">Never tested</span>
               ) : c.lastTestOk ? (
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.5)]" aria-hidden />
-                  <span className="text-emerald-400 font-medium font-mono text-[11px]">
+                  <span className="size-1.5 rounded-full bg-status-completed" aria-hidden />
+                  <span className="text-status-completed font-medium font-mono text-[11px]">
                     OK{c.lastTestLatencyMs ? ` · ${c.lastTestLatencyMs}ms` : ""}
                   </span>
                 </span>
@@ -278,7 +284,7 @@ function ChannelCard({
           </div>
         </dl>
 
-        <div className="flex gap-2 pt-1 border-t border-white/[0.05]">
+        <div className="flex gap-2 pt-1 border-t border-border">
           <Button size="sm" variant="outline" onClick={onTest} disabled={testing} className="flex-1">
             {testing ? <Loader2 className="size-3.5 mr-1 animate-spin" aria-hidden /> : <Zap className="size-3.5 mr-1" aria-hidden />}
             Test
@@ -350,8 +356,14 @@ function AddChannelDialog({ open, onOpenChange, editing }: { open: boolean; onOp
         toast({ title: editing ? "Couldn't save destination" : "Couldn't add destination", description: json.error ?? "Check the details and retry.", variant: "destructive" });
         return;
       }
-      toast({ title: editing ? "Channel updated" : "Channel added" });
-      qc.invalidateQueries({ queryKey: ["destinations"] });
+      toast({ title: editing ? "Channel updated" : "Channel connected", description: editing ? undefined : "Existing media records and folders are reused when reconnecting." });
+      // Reconnect restores file/folder visibility through the preserved DB rows.
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["destinations"] }),
+        qc.invalidateQueries({ queryKey: ["files"] }),
+        qc.invalidateQueries({ queryKey: ["folders"] }),
+        qc.invalidateQueries({ queryKey: ["folder"] }),
+      ]);
       onOpenChange(false);
     } finally {
       setSaving(false);

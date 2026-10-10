@@ -186,7 +186,7 @@ export default function AuditClient({
   };
 
   return (
-    <div className="space-y-5">
+    <div className="page-workspace space-y-5">
       <PageHeader
         title="Audit Log"
         description={`${total} entr${total === 1 ? "y" : "ies"} · every important operation with status and error details.`}
@@ -198,7 +198,7 @@ export default function AuditClient({
       />
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-3">
+      <div className="clay-toolbar flex flex-col md:flex-row gap-3 p-3 md:p-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
           <Input

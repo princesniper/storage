@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { withNonRemovedStorageChannel } from "@/lib/active-library";
 import { cache } from "@/lib/cache";
 import { formatSequence } from "@/lib/media-url";
 import { telegramService } from "@/services/telegram";
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "DOWNLOAD_LIMIT", detail: "Select between 1 and 25 files per download." }, { status: 400 });
   const ids = [...new Set(parsed.data.ids)];
   const files = await db.file.findMany({
-    where: { id: { in: ids }, status: "active" },
+    where: withNonRemovedStorageChannel({ id: { in: ids }, status: "active" }),
     select: { id: true, originalName: true, mimeType: true, size: true, sequenceNumber: true, publicId: true, telegramMessageId: true, telegramFileReference: true, storageChannel: { select: { telegramChannelId: true } } },
   });
   if (files.length !== ids.length) return NextResponse.json({ error: "FILE_UNAVAILABLE", detail: "One or more selected files are unavailable. Refresh and retry." }, { status: 409 });

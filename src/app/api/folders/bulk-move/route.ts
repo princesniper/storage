@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -15,9 +16,10 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "INVALID_BODY", detail: parsed.error.issues.map(x => x.message).join("; ") }, { status: 400 });
   const ids = [...new Set(parsed.data.ids)];
   const destinationId = parsed.data.parentId;
+  const visibleFolderIds = await getVisibleFolderIds(db);
   const folders = await db.folder.findMany({ select: { id: true, name: true, parentId: true } });
   const byId = new Map(folders.map(folder => [folder.id, folder]));
-  if (destinationId !== null && !byId.has(destinationId)) return NextResponse.json({ error: "INVALID_DESTINATION" }, { status: 400 });
+  if (destinationId !== null && (!byId.has(destinationId) || !visibleFolderIds.has(destinationId))) return NextResponse.json({ error: "INVALID_DESTINATION" }, { status: 400 });
   const selected = new Set(ids);
   const isNested = (folder: { id: number; parentId: number | null }) => {
     let parent = folder.parentId; const seen = new Set<number>();
@@ -29,9 +31,25 @@ export async function POST(req: Request) {
   const failed: { id: number; error: string }[] = [];
   const reserved = new Set(folders.filter(f => f.parentId === destinationId && !selected.has(f.id)).map(f => f.name.toLocaleLowerCase()));
   for (const id of ids) {
-    if (!byId.has(id)) { failed.push({ id, error: "NOT_FOUND" }); continue; }
+    if (!byId.has(id) || !visibleFolderIds.has(id)) { failed.push({ id, error: "NOT_FOUND" }); continue; }
     if (!roots.includes(id)) { moved.push(id); continue; }
     const folder = byId.get(id)!;
+    const treeIds = new Set<number>([id]);
+    let treeChanged = true;
+    while (treeChanged) {
+      treeChanged = false;
+      for (const child of folders) {
+        if (child.parentId !== null && treeIds.has(child.parentId) && !treeIds.has(child.id)) {
+          treeIds.add(child.id);
+          treeChanged = true;
+        }
+      }
+    }
+    const removedChannelFile = await db.file.findFirst({
+      where: { folderId: { in: [...treeIds] }, storageChannel: { is: { status: "removed" } } },
+      select: { id: true },
+    });
+    if (removedChannelFile) { failed.push({ id, error: "FOLDER_HAS_REMOVED_CHANNEL_DATA" }); continue; }
     if (folder.parentId === destinationId) { failed.push({ id, error: "ALREADY_IN_DESTINATION" }); continue; }
     let parent = destinationId; const seen = new Set<number>(); let cycle = false;
     while (parent !== null && !seen.has(parent)) { if (parent === id) { cycle = true; break; } seen.add(parent); parent = byId.get(parent)?.parentId ?? null; }

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { getSharedFolderAccess } from "@/lib/folder-share";
 import { findSharedFile, getSharedFileBytes } from "@/lib/shared-media";
 import { createZipStream, type ZipEntry } from "@/lib/zip";
@@ -14,14 +15,17 @@ export async function GET(_req: Request, ctx: RouteContext) {
   const { token } = await ctx.params;
   const access = await getSharedFolderAccess(token);
   if (!access) return NextResponse.json({ error: "INVALID_SHARE_LINK" }, { status: 404 });
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(access.folderId)) return NextResponse.json({ error: "INVALID_SHARE_LINK" }, { status: 404 });
+  const allowedFolderIds = [...access.folderIds].filter((id) => visibleFolderIds.has(id));
 
   const folders = await db.folder.findMany({
-    where: { id: { in: [...access.folderIds] } },
+    where: { id: { in: allowedFolderIds } },
     select: { id: true, name: true, parentId: true },
     orderBy: { id: "asc" },
   });
   const files = await db.file.findMany({
-    where: { folderId: { in: [...access.folderIds] }, status: "active" },
+    where: withNonRemovedStorageChannel({ folderId: { in: allowedFolderIds }, status: "active" }),
     select: { id: true, originalName: true, folderId: true },
     orderBy: { id: "asc" },
   });

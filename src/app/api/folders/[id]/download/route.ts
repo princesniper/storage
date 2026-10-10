@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds, withNonRemovedStorageChannel } from "@/lib/active-library";
 import { getSharedFileBytes, findSharedFile } from "@/lib/shared-media";
 import { createZipStream, type ZipEntry } from "@/lib/zip";
 import { NextResponse } from "next/server";
@@ -21,10 +22,13 @@ export async function GET(_req: Request, ctx: RouteContext) {
     return NextResponse.json({ error: "INVALID_FOLDER_ID" }, { status: 400 });
   }
 
+  const visibleFolderIds = await getVisibleFolderIds(db);
+  if (!visibleFolderIds.has(folderId)) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   const root = await db.folder.findUnique({ where: { id: folderId }, select: { id: true, name: true } });
   if (!root) return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
 
   const folders = await db.folder.findMany({
+    where: { id: { in: [...visibleFolderIds] } },
     select: { id: true, name: true, parentId: true },
     orderBy: { id: "asc" },
   });
@@ -43,7 +47,7 @@ export async function GET(_req: Request, ctx: RouteContext) {
 
   const includedFolders = folders.filter((folder) => folderIds.has(folder.id));
   const files = await db.file.findMany({
-    where: { folderId: { in: [...folderIds] }, status: "active" },
+    where: withNonRemovedStorageChannel({ folderId: { in: [...folderIds] }, status: "active" }),
     select: { id: true, originalName: true, folderId: true },
     orderBy: { id: "asc" },
   });

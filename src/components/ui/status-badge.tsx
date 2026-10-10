@@ -26,11 +26,11 @@ const tones: Record<Tone, string> = {
   waiting: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   processing: "bg-teal-500/15 text-teal-600 dark:text-teal-400",
   transit: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
-  completed: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  completed: "bg-status-completed/12 text-status-completed",
   exception: "bg-destructive/15 text-destructive",
   neutral: "bg-muted text-muted-foreground",
   // Legacy aliases → canonical 5-color mapping
-  success: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  success: "bg-status-completed/12 text-status-completed",
   error: "bg-destructive/15 text-destructive",
   warning: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
   info: "bg-sky-500/15 text-sky-600 dark:text-sky-400",

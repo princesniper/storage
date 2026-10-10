@@ -1,12 +1,15 @@
 /**
- * GET /api/folders?parentId=<id>
+ * GET /api/folders?parentId=<id>&all=true
  * POST /api/folders { name, parentId? }
  *
- * Task 1: authenticated folder hierarchy foundation.
+ * Folder rows are global and do not have a StorageChannel FK. Visibility is
+ * derived from existing File -> StorageChannel relationships so removed-only
+ * branches are hidden while shared trees remain visible for other channels.
  */
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getVisibleFolderIds } from "@/lib/active-library";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -21,6 +24,11 @@ function parseParentId(value: string | null): number | null | "invalid" {
   return Number.isInteger(n) && n > 0 ? n : "invalid";
 }
 
+const visibleFileWhere = {
+  status: "active",
+  storageChannel: { is: { status: { not: "removed" } } },
+} as const;
+
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -32,36 +40,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "INVALID_PARENT_ID" }, { status: 400 });
   }
 
-  if (parentId !== null) {
-    const parent = await db.folder.findUnique({ where: { id: parentId }, select: { id: true } });
-    if (!parent) return NextResponse.json({ error: "PARENT_NOT_FOUND" }, { status: 404 });
+  const visibleIds = await getVisibleFolderIds(db);
+  if (parentId !== null && !visibleIds.has(parentId)) {
+    return NextResponse.json({ error: "PARENT_NOT_FOUND" }, { status: 404 });
   }
 
-  const folders = await db.folder.findMany({
-    where: all ? undefined : { parentId },
+  // Compute subtree totals from visible descendants only; a relational _count
+  // would include removed-channel children and leave stale badges in the UI.
+  const allRows = await db.folder.findMany({
+    where: { id: { in: [...visibleIds] } },
     orderBy: { name: "asc" },
     include: {
-      _count: { select: { children: true, files: true } },
-      files: { where: { status: "active" }, select: { size: true, createdAt: true, updatedAt: true } },
+      files: { where: visibleFileWhere, select: { size: true, createdAt: true, updatedAt: true } },
     },
   });
 
-  // Calculate recursive folder totals from the same database snapshot. This
-  // keeps the UI lightweight while still showing true subtree counts/sizes.
-  const allRows = all
-    ? folders
-    : await db.folder.findMany({
-        select: {
-          id: true,
-          parentId: true,
-          files: { where: { status: "active" }, select: { size: true, createdAt: true, updatedAt: true } },
-          _count: { select: { children: true, files: true } },
-          name: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-  const byId = new Map(allRows.map((f) => [f.id, f]));
+  const byId = new Map(allRows.map((folder) => [folder.id, folder]));
   const childrenByParent = new Map<number, typeof allRows>();
   for (const row of allRows) {
     if (row.parentId === null) continue;
@@ -69,6 +63,7 @@ export async function GET(req: Request) {
     list.push(row);
     childrenByParent.set(row.parentId, list);
   }
+
   const totals = new Map<number, { files: number; folders: number; size: number; modified: Date }>();
   const visiting = new Set<number>();
 
@@ -77,31 +72,41 @@ export async function GET(req: Request) {
     if (cached) return cached;
     if (visiting.has(id)) return { files: 0, folders: 0, size: 0, modified: new Date(0) };
     visiting.add(id);
+
     const row = byId.get(id);
-    if (!row) return { files: 0, folders: 0, size: 0, modified: new Date(0) };
+    if (!row) {
+      visiting.delete(id);
+      return { files: 0, folders: 0, size: 0, modified: new Date(0) };
+    }
+
     let result = {
       files: row.files.length,
-      folders: row._count.children,
-      size: row.files.reduce((sum, f) => sum + Number(f.size), 0),
-      modified: row.files.reduce((latest, f) => {
-        const d = f.updatedAt ?? f.createdAt;
-        return d > latest ? d : latest;
+      folders: 0,
+      size: row.files.reduce((sum, file) => sum + Number(file.size), 0),
+      modified: row.files.reduce((latest, file) => {
+        const date = file.updatedAt ?? file.createdAt;
+        return date > latest ? date : latest;
       }, row.updatedAt),
     };
-    for (const child of childrenByParent.get(id) ?? []) {
+
+    const children = childrenByParent.get(id) ?? [];
+    result.folders = children.length;
+    for (const child of children) {
       const sub = calculate(child.id);
       result = {
         files: result.files + sub.files,
-        folders: result.folders + 1 + sub.folders,
+        folders: result.folders + sub.folders,
         size: result.size + sub.size,
         modified: sub.modified > result.modified ? sub.modified : result.modified,
       };
     }
+
     visiting.delete(id);
     totals.set(id, result);
     return result;
   };
 
+  const folders = all ? allRows : allRows.filter((folder) => folder.parentId === parentId);
   return NextResponse.json({
     folders: folders.map((folder) => {
       const total = calculate(folder.id);
@@ -111,7 +116,7 @@ export async function GET(req: Request) {
         parentId: folder.parentId,
         createdAt: folder.createdAt,
         updatedAt: folder.updatedAt,
-        childFolderCount: folder._count.children,
+        childFolderCount: (childrenByParent.get(folder.id) ?? []).length,
         fileCount: folder.files.length,
         totalFileCount: total.files,
         totalFolderCount: total.folders,
@@ -119,7 +124,7 @@ export async function GET(req: Request) {
         lastModified: total.modified,
       };
     }),
-  });
+  }, { headers: { "Cache-Control": "private, no-store, max-age=0" } });
 }
 
 export async function POST(req: Request) {
@@ -137,15 +142,17 @@ export async function POST(req: Request) {
   }
 
   if (body.parentId != null) {
-    const parent = await db.folder.findUnique({ where: { id: body.parentId }, select: { id: true } });
-    if (!parent) return NextResponse.json({ error: "PARENT_NOT_FOUND" }, { status: 404 });
+    const visibleIds = await getVisibleFolderIds(db);
+    if (!visibleIds.has(body.parentId)) {
+      return NextResponse.json({ error: "PARENT_NOT_FOUND" }, { status: 404 });
+    }
   }
 
   try {
     const folder = await db.folder.create({
       data: { name: body.name, parentId: body.parentId ?? null },
     });
-    return NextResponse.json({ folder }, { status: 201 });
+    return NextResponse.json({ folder }, { status: 201, headers: { "Cache-Control": "private, no-store, max-age=0" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("Folder_parentId_name_key")) {
