@@ -126,7 +126,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
           <span
             data-selection-control
             className={cn(
-              "absolute top-0 left-0 z-20 size-11 p-2 flex items-start justify-start duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-opacity",
+              "absolute top-0 left-0 z-20 size-[66px] p-2 flex items-start justify-start duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-opacity",
               selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100",
               file.status !== "active" && "cursor-not-allowed opacity-40"
             )}
@@ -136,7 +136,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
             <span
               className={cn(
                 "size-5 rounded-lg border flex items-center justify-center duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-[background-color,border-color]",
-                selected ? "bg-primary border-primary" : "bg-black/50 border-white/30 backdrop-blur"
+                selected ? "bg-primary border-primary" : "bg-transparent border-white/30"
               )}
               aria-label={`${selected ? "Deselect" : "Select"} ${file.originalName}`}
               role="checkbox"
