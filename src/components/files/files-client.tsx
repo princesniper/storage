@@ -520,6 +520,7 @@ export default function FilesClient() {
         <MediaGrid
           files={files as unknown as MediaFile[]}
           selected={selected}
+          selectionMode={selected.size > 0}
           onSelect={(id) => toggleSelect(id)}
           onOpen={(id) => openDetail(id)}
           onDelete={(f) => confirmSingleDelete(f as unknown as FileRow)}
