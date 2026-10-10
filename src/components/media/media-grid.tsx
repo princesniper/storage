@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 interface MediaGridProps {
   files: MediaFile[];
   selected?: Set<number>;
+  selectionMode?: boolean;
   onSelect?: (id: number) => void;
   onOpen?: (id: number) => void;
   onDelete?: (file: MediaFile) => void;
@@ -18,7 +19,7 @@ interface MediaGridProps {
  *   5 cols  1200-1439px
  *   6 cols  ≥1440px
  */
-export function MediaGrid({ files, selected, onSelect, onOpen, onDelete, className }: MediaGridProps) {
+export function MediaGrid({ files, selected, selectionMode, onSelect, onOpen, onDelete, className }: MediaGridProps) {
   return (
     <div
       className={cn(
@@ -35,6 +36,7 @@ export function MediaGrid({ files, selected, onSelect, onOpen, onDelete, classNa
             file={f}
             index={i}
             selected={selected?.has(f.id)}
+            selectionMode={selectionMode}
             onSelect={onSelect ? () => onSelect(f.id) : undefined}
             onOpen={onOpen ? () => onOpen(f.id) : undefined}
             onDelete={onDelete ? () => onDelete(f) : undefined}
