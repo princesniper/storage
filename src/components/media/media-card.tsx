@@ -127,7 +127,7 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
             type="button"
             data-selection-control
             className={cn(
-              "absolute top-0 left-0 z-20 size-[66px] p-0 flex items-start justify-start bg-transparent border-0 shadow-none appearance-none rounded-none !outline-none !ring-0 [WebkitTapHighlightColor:transparent] [touch-action:manipulation]",
+              "absolute top-0 left-0 z-20 size-[66px] p-0 flex items-start justify-start bg-transparent border-0 shadow-none appearance-none rounded-none !outline-none !ring-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]",
               selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100",
               file.status !== "active" && "cursor-not-allowed opacity-40"
             )}
