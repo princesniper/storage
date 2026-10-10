@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Film, Copy, Check, Eye, Trash2, Play, Music, Camera } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBytes, isVideoMime, isAudioMime, isRawMime } from "@/lib/format";
@@ -28,6 +28,7 @@ interface MediaCardProps {
   file: MediaFile;
   index?: number;
   selected?: boolean;
+  selectionMode?: boolean;
   onSelect?: () => void;
   onOpen?: () => void;
   onDelete?: () => void;
@@ -38,8 +39,66 @@ function formatSeq(n: number | null): string {
   return String(n).padStart(6, "0");
 }
 
-export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelete }: MediaCardProps) {
+export function MediaCard({ file, index = 0, selected, selectionMode, onSelect, onOpen, onDelete }: MediaCardProps) {
   const [copied, setCopied] = useState(false);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const longPressTriggered = useRef(false);
+  const suppressNextClick = useRef(false);
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+    pointerStart.current = null;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "touch" || !onSelect || file.status !== "active") return;
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, input, [role='checkbox'], [data-selection-control]")) return;
+
+    cancelLongPress();
+    longPressTriggered.current = false;
+    suppressNextClick.current = false;
+    pointerStart.current = { x: e.clientX, y: e.clientY };
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      suppressNextClick.current = true;
+      if (!selected) onSelect();
+    }, 450);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!pointerStart.current || !longPressTimer.current) return;
+    const dx = e.clientX - pointerStart.current.x;
+    const dy = e.clientY - pointerStart.current.y;
+    if (Math.hypot(dx, dy) > 10) cancelLongPress();
+  };
+
+  const handlePointerUp = () => {
+    cancelLongPress();
+    setTimeout(() => { suppressNextClick.current = false; }, 0);
+  };
+
+  const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (suppressNextClick.current || longPressTriggered.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      suppressNextClick.current = false;
+      longPressTriggered.current = false;
+      return;
+    }
+    if (selectionMode && onSelect && file.status === "active") {
+      e.preventDefault();
+      onSelect();
+      return;
+    }
+    handleOpen();
+  };
+
+  const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (longPressTriggered.current) e.preventDefault();
+  };
   const isVideo = isVideoMime(file.mimeType);
   const isAudio = isAudioMime(file.mimeType);
   const isRaw = isRawMime(file.mimeType);
@@ -62,14 +121,19 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
     <div
       className={cn(
         "clay-media-card group relative rounded-xl border overflow-hidden cursor-pointer card-interactive animate-page-enter bg-card",
-        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2",
+        "focus-visible:outline-2 focus-visible:outline-ring focus-visible:outline-offset-2 select-none",
         selected ? "ring-2 ring-primary border-primary/40" : "border-border hover:border-primary/30"
       )}
       style={{ "--enter-delay": `${Math.min(index, 15) * 20}ms` } as React.CSSProperties}
       role="button"
       tabIndex={0}
       aria-label={`${file.originalName} — open preview`}
-      onClick={handleOpen}
+      onClick={handleCardClick}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={cancelLongPress}
+      onContextMenu={handleContextMenu}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpen(); }
       }}
@@ -126,11 +190,13 @@ export function MediaCard({ file, index = 0, selected, onSelect, onOpen, onDelet
         {/* Selection checkbox */}
         {onSelect && (
           <span
+            data-selection-control
             className={cn(
-              "absolute top-2 left-2 z-10 duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-opacity",
+              "absolute top-0 left-0 z-20 size-11 p-2 flex items-start justify-start duration-[var(--duration-fast)] ease-[cubic-bezier(0.16,1,0.3,1)] transition-opacity",
               selected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100",
               file.status !== "active" && "cursor-not-allowed opacity-40"
             )}
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => { e.stopPropagation(); if (file.status === "active") onSelect(); }}
           >
             <span
