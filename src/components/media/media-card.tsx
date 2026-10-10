@@ -77,7 +77,18 @@ export function MediaCard({ file, index = 0, selected, selectionMode, onSelect, 
 
   const handlePointerUp = () => {
     cancelLongPress();
-    setTimeout(() => { suppressNextClick.current = false; }, 0);
+    setTimeout(() => {
+      suppressNextClick.current = false;
+      longPressTriggered.current = false;
+    }, 0);
+  };
+
+  const handlePointerCancel = () => {
+    cancelLongPress();
+    setTimeout(() => {
+      suppressNextClick.current = false;
+      longPressTriggered.current = false;
+    }, 0);
   };
 
   const handleCardClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -132,7 +143,7 @@ export function MediaCard({ file, index = 0, selected, selectionMode, onSelect, 
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={cancelLongPress}
+      onPointerCancel={handlePointerCancel}
       onContextMenu={handleContextMenu}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleOpen(); }
